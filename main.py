@@ -37,6 +37,12 @@ def speichere_status(status: dict) -> None:
 def sende_pushover(titel: str, nachricht: str, prioritaet: int = 0) -> None:
     """
     Sendet eine Push-Nachricht über Pushover.
+
+    Priorität:
+        -2 = lautlos
+        -1 = unauffällig
+         0 = normal
+         1 = wichtig
     """
     user_key = os.environ.get("PUSHOVER_USER_KEY")
     api_token = os.environ.get("PUSHOVER_API_TOKEN")
@@ -201,7 +207,9 @@ def main() -> None:
         speichere_status(
             {
                 "letzter_status": ergebnis["status"],
+                "letzter_status_text": ergebnis["nachricht"].split("\n")[0],
                 "letzte_aktualisierung": zeit,
+                "letzte_push_zeit": zeit,
             }
         )
     else:
