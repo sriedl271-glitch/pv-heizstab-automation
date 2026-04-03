@@ -3,15 +3,22 @@ import requests
 from datetime import datetime
 
 
-def send_pushover(title: str, message: str) -> None:
+def send_pushover(title: str, message: str, priority: int = 0) -> None:
     """
-    Sendet eine echte Push-Nachricht über Pushover.
+    Sendet eine Push-Nachricht über Pushover.
+    priority:
+        -2 = lautlos
+        -1 = unauffällig
+         0 = normal
+         1 = wichtig
     """
     user_key = os.environ.get("PUSHOVER_USER_KEY")
     api_token = os.environ.get("PUSHOVER_API_TOKEN")
 
     if not user_key or not api_token:
         print("❌ Pushover Keys fehlen!")
+        print("USER_KEY vorhanden:", bool(user_key))
+        print("API_TOKEN vorhanden:", bool(api_token))
         return
 
     data = {
@@ -19,6 +26,7 @@ def send_pushover(title: str, message: str) -> None:
         "user": user_key,
         "title": title,
         "message": message,
+        "priority": priority,
     }
 
     try:
@@ -27,26 +35,27 @@ def send_pushover(title: str, message: str) -> None:
             data=data,
             timeout=10,
         )
-        print(f"✅ Pushover gesendet: {response.status_code}")
+        print("Pushover Statuscode:", response.status_code)
+        print("Pushover Antwort:", response.text)
     except Exception as e:
         print("❌ Fehler bei Pushover:", str(e))
 
 
 def send_email(subject: str, body: str) -> None:
     """
-    Aktuell nur Platzhalter.
-    (bauen wir später richtig ein)
+    Platzhalter für späteren E-Mail-Versand.
     """
     print("📧 EMAIL TEST")
     print(f"BETREFF: {subject}")
     print("INHALT:")
     print(body)
-    print("-" * 50)
+    print("-" * 60)
 
 
-def evaluate_test_data() -> dict:
+def get_test_data() -> dict:
     """
-    Testdaten (später iSolarCloud).
+    Testdaten für die Entwicklung.
+    Diese Funktion ersetzen wir später durch echte iSolarCloud-Daten.
     """
     return {
         "battery_percent": 92,
@@ -57,9 +66,10 @@ def evaluate_test_data() -> dict:
     }
 
 
-def build_message(data: dict) -> tuple[str, str]:
+def evaluate_status(data: dict) -> dict:
     """
-    Logik zur Entscheidung.
+    Bewertet die aktuelle Lage anhand der Daten
+    und gibt einen sauberen Status zurück.
     """
     battery = data["battery_percent"]
     pv_power = data["pv_power_w"]
@@ -67,65 +77,100 @@ def build_message(data: dict) -> tuple[str, str]:
     grid = data["grid_power_w"]
     surplus = data["surplus_w"]
 
+    # Priorität: Netzbezug zuerst prüfen
     if grid > 200:
-        title = "PV Warnung"
-        message = (
-            f"⚠️ Netzbezug erkannt!\n\n"
-            f"Batterie: {battery}%\n"
-            f"PV-Leistung: {pv_power} W\n"
-            f"Hausverbrauch: {house_power} W\n"
-            f"Überschuss: {surplus} W\n"
-            f"Netzbezug: {grid} W\n\n"
-            f"👉 Empfehlung: Heizstab AUS"
-        )
+        return {
+            "status_code": "GRID_WARNING",
+            "title": "PV Warnung",
+            "priority": 1,
+            "message": (
+                f"⚠️ Netzbezug erkannt\n\n"
+                f"Batterie: {battery}%\n"
+                f"PV-Leistung: {pv_power} W\n"
+                f"Hausverbrauch: {house_power} W\n"
+                f"Überschuss: {surplus} W\n"
+                f"Netzbezug: {grid} W\n\n"
+                f"👉 Empfehlung: Heizstab ausschalten"
+            ),
+        }
 
-    elif battery >= 94 and surplus >= 6300:
-        title = "PV Hinweis"
-        message = (
-            f"🔥 6 kW sinnvoll\n\n"
-            f"Batterie: {battery}%\n"
-            f"PV-Leistung: {pv_power} W\n"
-            f"Hausverbrauch: {house_power} W\n"
-            f"Überschuss: {surplus} W"
-        )
+    if battery >= 94 and surplus >= 6300:
+        return {
+            "status_code": "HEAT_6KW",
+            "title": "PV Hinweis",
+            "priority": 0,
+            "message": (
+                f"🔥 6 kW sinnvoll\n\n"
+                f"Batterie: {battery}%\n"
+                f"PV-Leistung: {pv_power} W\n"
+                f"Hausverbrauch: {house_power} W\n"
+                f"Überschuss: {surplus} W\n"
+                f"Netzbezug: {grid} W"
+            ),
+        }
 
-    elif battery >= 88 and surplus >= 3200:
-        title = "PV Hinweis"
-        message = (
-            f"🔥 3 kW sinnvoll\n\n"
-            f"Batterie: {battery}%\n"
-            f"PV-Leistung: {pv_power} W\n"
-            f"Hausverbrauch: {house_power} W\n"
-            f"Überschuss: {surplus} W"
-        )
+    if battery >= 88 and surplus >= 3200:
+        return {
+            "status_code": "HEAT_3KW",
+            "title": "PV Hinweis",
+            "priority": 0,
+            "message": (
+                f"🔥 3 kW sinnvoll\n\n"
+                f"Batterie: {battery}%\n"
+                f"PV-Leistung: {pv_power} W\n"
+                f"Hausverbrauch: {house_power} W\n"
+                f"Überschuss: {surplus} W\n"
+                f"Netzbezug: {grid} W"
+            ),
+        }
 
-    else:
-        title = "PV Status"
-        message = (
+    return {
+        "status_code": "NO_ACTION",
+        "title": "PV Status",
+        "priority": -1,
+        "message": (
             f"ℹ️ Keine Aktion nötig\n\n"
             f"Batterie: {battery}%\n"
             f"PV-Leistung: {pv_power} W\n"
             f"Hausverbrauch: {house_power} W\n"
-            f"Überschuss: {surplus} W"
-        )
+            f"Überschuss: {surplus} W\n"
+            f"Netzbezug: {grid} W"
+        ),
+    }
 
-    return title, message
+
+def print_console_block(now: str, result: dict) -> None:
+    """
+    Schöne Konsolenausgabe für GitHub Actions.
+    """
+    print("=== PV MONITOR START ===")
+    print(f"Zeit: {now}")
+    print(f"Status: {result['status_code']}")
+    print("-" * 60)
+    print(result["message"])
+    print("-" * 60)
 
 
 def main() -> None:
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    data = evaluate_test_data()
-    title, message = build_message(data)
+    data = get_test_data()
+    result = evaluate_status(data)
 
-    full_message = f"Zeit: {now}\n\n{message}"
+    full_message = f"Zeit: {now}\n\n{result['message']}"
 
-    print("=== PV MONITOR START ===")
-    print(full_message)
-    print("-" * 50)
+    print_console_block(now, result)
 
-    send_pushover(title, full_message)
-    send_email(title, full_message)
+    send_pushover(
+        title=result["title"],
+        message=full_message,
+        priority=result["priority"],
+    )
+
+    send_email(
+        subject=result["title"],
+        body=full_message,
+    )
 
     print("=== PV MONITOR ENDE ===")
 
