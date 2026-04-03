@@ -22,4 +22,7 @@ jobs:
         run: pip install requests
 
       - name: Script ausführen
+        env:
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
         run: python main.py
