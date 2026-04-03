@@ -3,10 +3,11 @@ import requests
 from datetime import datetime
 
 
-def send_pushover(title: str, message: str, priority: int = 0) -> None:
+def sende_pushover(titel: str, nachricht: str, prioritaet: int = 0) -> None:
     """
     Sendet eine Push-Nachricht über Pushover.
-    priority:
+
+    Priorität:
         -2 = lautlos
         -1 = unauffällig
          0 = normal
@@ -16,23 +17,23 @@ def send_pushover(title: str, message: str, priority: int = 0) -> None:
     api_token = os.environ.get("PUSHOVER_API_TOKEN")
 
     if not user_key or not api_token:
-        print("❌ Pushover Keys fehlen!")
+        print("❌ Pushover-Zugangsdaten fehlen!")
         print("USER_KEY vorhanden:", bool(user_key))
         print("API_TOKEN vorhanden:", bool(api_token))
         return
 
-    data = {
+    daten = {
         "token": api_token,
         "user": user_key,
-        "title": title,
-        "message": message,
-        "priority": priority,
+        "title": titel,
+        "message": nachricht,
+        "priority": prioritaet,
     }
 
     try:
         response = requests.post(
             "https://api.pushover.net/1/messages.json",
-            data=data,
+            data=daten,
             timeout=10,
         )
         print("Pushover Statuscode:", response.status_code)
@@ -41,135 +42,137 @@ def send_pushover(title: str, message: str, priority: int = 0) -> None:
         print("❌ Fehler bei Pushover:", str(e))
 
 
-def send_email(subject: str, body: str) -> None:
+def sende_email(betreff: str, inhalt: str) -> None:
     """
     Platzhalter für späteren E-Mail-Versand.
     """
-    print("📧 EMAIL TEST")
-    print(f"BETREFF: {subject}")
+    print("📧 E-MAIL TEST")
+    print(f"BETREFF: {betreff}")
     print("INHALT:")
-    print(body)
+    print(inhalt)
     print("-" * 60)
 
 
-def get_test_data() -> dict:
+def hole_testdaten() -> dict:
     """
     Testdaten für die Entwicklung.
-    Diese Funktion ersetzen wir später durch echte iSolarCloud-Daten.
+    Wird später durch echte iSolarCloud-Daten ersetzt.
     """
     return {
-        "battery_percent": 92,
-        "pv_power_w": 5200,
-        "house_power_w": 1400,
-        "grid_power_w": 0,
-        "surplus_w": 3800,
+        "batterie_prozent": 92,
+        "pv_leistung_w": 5200,
+        "hausverbrauch_w": 1400,
+        "netzbezug_w": 0,
+        "ueberschuss_w": 3800,
     }
 
 
-def evaluate_status(data: dict) -> dict:
+def bewerte_status(daten: dict) -> dict:
     """
-    Bewertet die aktuelle Lage anhand der Daten
-    und gibt einen sauberen Status zurück.
+    Bewertet die aktuelle Situation und gibt einen Status zurück.
     """
-    battery = data["battery_percent"]
-    pv_power = data["pv_power_w"]
-    house_power = data["house_power_w"]
-    grid = data["grid_power_w"]
-    surplus = data["surplus_w"]
+    batterie = daten["batterie_prozent"]
+    pv = daten["pv_leistung_w"]
+    haus = daten["hausverbrauch_w"]
+    netz = daten["netzbezug_w"]
+    ueberschuss = daten["ueberschuss_w"]
 
-    # Priorität: Netzbezug zuerst prüfen
-    if grid > 200:
+    # 1. Wichtigster Fall: Netzbezug
+    if netz > 200:
         return {
-            "status_code": "GRID_WARNING",
-            "title": "PV Warnung",
-            "priority": 1,
-            "message": (
-                f"⚠️ Netzbezug erkannt\n\n"
-                f"Batterie: {battery}%\n"
-                f"PV-Leistung: {pv_power} W\n"
-                f"Hausverbrauch: {house_power} W\n"
-                f"Überschuss: {surplus} W\n"
-                f"Netzbezug: {grid} W\n\n"
+            "status": "NETZBEZUG_WARNUNG",
+            "titel": "⚠️ PV Warnung",
+            "prioritaet": 1,
+            "nachricht": (
+                f"Netzbezug erkannt!\n\n"
+                f"Batterie: {batterie}%\n"
+                f"PV-Leistung: {pv} W\n"
+                f"Hausverbrauch: {haus} W\n"
+                f"Überschuss: {ueberschuss} W\n"
+                f"Netzbezug: {netz} W\n\n"
                 f"👉 Empfehlung: Heizstab ausschalten"
             ),
         }
 
-    if battery >= 94 and surplus >= 6300:
+    # 2. 6 kW sinnvoll
+    if batterie >= 94 and ueberschuss >= 6300:
         return {
-            "status_code": "HEAT_6KW",
-            "title": "PV Hinweis",
-            "priority": 0,
-            "message": (
-                f"🔥 6 kW sinnvoll\n\n"
-                f"Batterie: {battery}%\n"
-                f"PV-Leistung: {pv_power} W\n"
-                f"Hausverbrauch: {house_power} W\n"
-                f"Überschuss: {surplus} W\n"
-                f"Netzbezug: {grid} W"
+            "status": "HEIZSTAB_6KW",
+            "titel": "🔥 PV Hinweis",
+            "prioritaet": 0,
+            "nachricht": (
+                f"6 kW Heizstab sinnvoll\n\n"
+                f"Batterie: {batterie}%\n"
+                f"PV-Leistung: {pv} W\n"
+                f"Hausverbrauch: {haus} W\n"
+                f"Überschuss: {ueberschuss} W\n"
+                f"Netzbezug: {netz} W"
             ),
         }
 
-    if battery >= 88 and surplus >= 3200:
+    # 3. 3 kW sinnvoll
+    if batterie >= 88 and ueberschuss >= 3200:
         return {
-            "status_code": "HEAT_3KW",
-            "title": "PV Hinweis",
-            "priority": 0,
-            "message": (
-                f"🔥 3 kW sinnvoll\n\n"
-                f"Batterie: {battery}%\n"
-                f"PV-Leistung: {pv_power} W\n"
-                f"Hausverbrauch: {house_power} W\n"
-                f"Überschuss: {surplus} W\n"
-                f"Netzbezug: {grid} W"
+            "status": "HEIZSTAB_3KW",
+            "titel": "🔥 PV Hinweis",
+            "prioritaet": 0,
+            "nachricht": (
+                f"3 kW Heizstab sinnvoll\n\n"
+                f"Batterie: {batterie}%\n"
+                f"PV-Leistung: {pv} W\n"
+                f"Hausverbrauch: {haus} W\n"
+                f"Überschuss: {ueberschuss} W\n"
+                f"Netzbezug: {netz} W"
             ),
         }
 
+    # 4. Keine Aktion nötig
     return {
-        "status_code": "NO_ACTION",
-        "title": "PV Status",
-        "priority": -1,
-        "message": (
-            f"ℹ️ Keine Aktion nötig\n\n"
-            f"Batterie: {battery}%\n"
-            f"PV-Leistung: {pv_power} W\n"
-            f"Hausverbrauch: {house_power} W\n"
-            f"Überschuss: {surplus} W\n"
-            f"Netzbezug: {grid} W"
+        "status": "KEINE_AKTION",
+        "titel": "ℹ️ PV Status",
+        "prioritaet": -1,
+        "nachricht": (
+            f"Keine Aktion erforderlich\n\n"
+            f"Batterie: {batterie}%\n"
+            f"PV-Leistung: {pv} W\n"
+            f"Hausverbrauch: {haus} W\n"
+            f"Überschuss: {ueberschuss} W\n"
+            f"Netzbezug: {netz} W"
         ),
     }
 
 
-def print_console_block(now: str, result: dict) -> None:
+def konsolen_ausgabe(zeit: str, ergebnis: dict) -> None:
     """
-    Schöne Konsolenausgabe für GitHub Actions.
+    Übersichtliche Ausgabe für GitHub Logs.
     """
     print("=== PV MONITOR START ===")
-    print(f"Zeit: {now}")
-    print(f"Status: {result['status_code']}")
+    print(f"Zeit: {zeit}")
+    print(f"Status: {ergebnis['status']}")
     print("-" * 60)
-    print(result["message"])
+    print(ergebnis["nachricht"])
     print("-" * 60)
 
 
 def main() -> None:
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    zeit = datetime.now().strftime("%d.%m.%Y %H:%M:%S")
 
-    data = get_test_data()
-    result = evaluate_status(data)
+    daten = hole_testdaten()
+    ergebnis = bewerte_status(daten)
 
-    full_message = f"Zeit: {now}\n\n{result['message']}"
+    nachricht_gesamt = f"Zeit: {zeit}\n\n{ergebnis['nachricht']}"
 
-    print_console_block(now, result)
+    konsolen_ausgabe(zeit, ergebnis)
 
-    send_pushover(
-        title=result["title"],
-        message=full_message,
-        priority=result["priority"],
+    sende_pushover(
+        titel=ergebnis["titel"],
+        nachricht=nachricht_gesamt,
+        prioritaet=ergebnis["prioritaet"],
     )
 
-    send_email(
-        subject=result["title"],
-        body=full_message,
+    sende_email(
+        betreff=ergebnis["titel"],
+        inhalt=nachricht_gesamt,
     )
 
     print("=== PV MONITOR ENDE ===")
