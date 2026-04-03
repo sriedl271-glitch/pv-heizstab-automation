@@ -18,5 +18,8 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: requests installieren
+        run: pip install requests
+
       - name: Script ausführen
         run: python main.py
