@@ -1,12 +1,7 @@
 """
-TYDOM Discovery Script - Version 7
-Vollstaendiger 3-stufiger Authentifizierungsprozess:
-
-STUFE 1: OAuth2-Login bei Delta Dore Azure B2C -> access_token
-STUFE 2: Gateway-Passwort von Delta Dore API holen (mit access_token)
-STUFE 3: WebSocket-Verbindung mit Digest Auth (MAC + Gateway-Passwort)
-
-Erkenntnisquelle: hass-deltadore-tydom-component (GitHub, CyrilP)
+TYDOM Discovery Script - Version 8
+Liest alle Geraete, Endpunkte und aktuellen Zustaende aus TYDOM.
+Ziel: Geraete-IDs und Befehls-Format fuer Heizstab-Steuerung ermitteln.
 """
 import asyncio
 import hashlib
@@ -20,12 +15,10 @@ import urllib.parse
 import websockets
 
 
-TYDOM_MAC = "001A25067773"
-MEDIATION_URL = "mediation.tydom.com"
-TYDOM_WSS  = f"wss://{MEDIATION_URL}/mediation/client?mac={TYDOM_MAC}&appli=1"
-TYDOM_HTTPS = f"https://{MEDIATION_URL}/mediation/client?mac={TYDOM_MAC}&appli=1"
+TYDOM_MAC   = "001A25067773"
+TYDOM_WSS   = f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
+TYDOM_HTTPS = f"https://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
 
-# Delta Dore OAuth2 / B2C Konfiguration
 DELTADORE_AUTH_URL  = (
     "https://deltadoreadb2ciot.b2clogin.com"
     "/deltadoreadb2ciot.onmicrosoft.com"
@@ -35,10 +28,8 @@ DELTADORE_AUTH_URL  = (
 DELTADORE_CLIENT_ID = "8782839f-3264-472a-ab87-4d4e23524da4"
 DELTADORE_SCOPE = (
     "openid profile offline_access "
-    "https://deltadoreadb2ciot.onmicrosoft.com/iotapi/video_config "
     "https://deltadoreadb2ciot.onmicrosoft.com/iotapi/sites_management_allowed "
     "https://deltadoreadb2ciot.onmicrosoft.com/iotapi/sites_management_gateway_credentials "
-    "https://deltadoreadb2ciot.onmicrosoft.com/iotapi/pilotage_allowed "
     "https://deltadoreadb2ciot.onmicrosoft.com/iotapi/tydom_backend_allowed "
     "https://deltadoreadb2ciot.onmicrosoft.com/iotapi/websocket_remote_access"
 )
@@ -47,373 +38,188 @@ DELTADORE_API_SITES = (
 )
 
 
-def md5(text: str) -> str:
+def md5(text):
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
-def parse_www_authenticate(header: str) -> dict:
+def parse_www_authenticate(header):
     params = {}
-    for match in re.finditer(r'(\w+)="([^"]*)"', header):
-        params[match.group(1)] = match.group(2)
-    for match in re.finditer(r'(\w+)=([^",\s]+)', header):
-        if match.group(1) not in params:
-            params[match.group(1)] = match.group(2)
+    for m in re.finditer(r'(\w+)="([^"]*)"', header):
+        params[m.group(1)] = m.group(2)
+    for m in re.finditer(r'(\w+)=([^",\s]+)', header):
+        if m.group(1) not in params:
+            params[m.group(1)] = m.group(2)
     return params
 
 
-def berechne_digest(username, password, challenge_params, uri, methode="GET"):
-    realm  = challenge_params.get("realm", "")
-    nonce  = challenge_params.get("nonce", "")
-    qop    = challenge_params.get("qop", "")
-    opaque = challenge_params.get("opaque", "")
-
-    nc     = "00000001"
-    cnonce = secrets.token_hex(8)
-
+def berechne_digest(username, password, cp, uri, methode="GET"):
+    realm, nonce, qop = cp.get("realm",""), cp.get("nonce",""), cp.get("qop","")
+    nc, cnonce = "00000001", secrets.token_hex(8)
     ha1 = md5(f"{username}:{realm}:{password}")
     ha2 = md5(f"{methode}:{uri}")
-
     if qop and "auth" in qop:
-        response = md5(f"{ha1}:{nonce}:{nc}:{cnonce}:{qop}:{ha2}")
-        header = (
-            f'Digest username="{username}", realm="{realm}", '
-            f'nonce="{nonce}", uri="{uri}", '
-            f'qop={qop}, nc={nc}, cnonce="{cnonce}", response="{response}"'
-        )
+        resp = md5(f"{ha1}:{nonce}:{nc}:{cnonce}:{qop}:{ha2}")
+        hdr = (f'Digest username="{username}", realm="{realm}", nonce="{nonce}", '
+               f'uri="{uri}", qop={qop}, nc={nc}, cnonce="{cnonce}", response="{resp}"')
     else:
-        response = md5(f"{ha1}:{nonce}:{ha2}")
-        header = (
-            f'Digest username="{username}", realm="{realm}", '
-            f'nonce="{nonce}", uri="{uri}", response="{response}"'
-        )
-
-    if opaque:
-        header += f', opaque="{opaque}"'
-
-    return header
+        resp = md5(f"{ha1}:{nonce}:{ha2}")
+        hdr = f'Digest username="{username}", realm="{realm}", nonce="{nonce}", uri="{uri}", response="{resp}"'
+    if cp.get("opaque"):
+        hdr += f', opaque="{cp["opaque"]}"'
+    return hdr
 
 
-# ─────────────────────────────────────────────
-# STUFE 1: OAuth2-Token holen
-# ─────────────────────────────────────────────
-def stufe1_oauth2_token(email, passwort):
-    print("\n" + "=" * 60)
-    print("STUFE 1: OAuth2-Login bei Delta Dore")
-    print("=" * 60)
-
-    # 1a: OpenID-Konfiguration abrufen -> token_endpoint
-    print("1a) Hole token_endpoint von B2C...")
-    try:
-        req = urllib.request.Request(
-            DELTADORE_AUTH_URL,
-            headers={"User-Agent": "TydomApp/4.17.41"},
-        )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            openid_config = json.loads(r.read().decode())
-        token_endpoint = openid_config.get("token_endpoint", "")
-        print(f"    token_endpoint = {token_endpoint[:70]}...")
-    except Exception as e:
-        print(f"    FEHLER: {type(e).__name__}: {e}")
-        return None
-
-    # 1b: Token anfordern
-    print("1b) Fordere access_token an...")
-    try:
-        post_daten = urllib.parse.urlencode({
-            "username":   email,
-            "password":   passwort,
-            "grant_type": "password",
-            "client_id":  DELTADORE_CLIENT_ID,
-            "scope":      DELTADORE_SCOPE,
-        }).encode("utf-8")
-
-        req = urllib.request.Request(
-            token_endpoint,
-            data=post_daten,
-            method="POST",
-            headers={
-                "Content-Type": "application/x-www-form-urlencoded",
-                "User-Agent": "TydomApp/4.17.41",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            token_antwort = json.loads(r.read().decode())
-
-        access_token = token_antwort.get("access_token", "")
-        if access_token:
-            print(f"    access_token = {access_token[:30]}... (OK)")
-            return access_token
-        else:
-            print(f"    Kein access_token in Antwort!")
-            print(f"    Antwort: {json.dumps(token_antwort)[:300]}")
-            return None
-
-    except urllib.error.HTTPError as e:
-        fehler_body = e.read().decode()
-        print(f"    HTTP {e.code}: {fehler_body[:300]}")
-        return None
-    except Exception as e:
-        print(f"    FEHLER: {type(e).__name__}: {e}")
-        return None
-
-
-# ─────────────────────────────────────────────
-# STUFE 2: Gateway-Passwort holen
-# ─────────────────────────────────────────────
-def api_get(url, access_token):
-    """Hilfsfunktion: GET-Request mit Bearer Token."""
-    req = urllib.request.Request(
-        url,
-        headers={
-            "Authorization": f"Bearer {access_token}",
-            "User-Agent": "TydomApp/4.17.41",
-            "Accept": "application/json",
-        },
-    )
+def oauth2_token(email, passwort):
+    req = urllib.request.Request(DELTADORE_AUTH_URL, headers={"User-Agent": "TydomApp/4.17.41"})
     with urllib.request.urlopen(req, timeout=15) as r:
-        return json.loads(r.read().decode())
+        token_endpoint = json.loads(r.read().decode())["token_endpoint"]
+    post = urllib.parse.urlencode({
+        "username": email, "password": passwort,
+        "grant_type": "password", "client_id": DELTADORE_CLIENT_ID, "scope": DELTADORE_SCOPE,
+    }).encode("utf-8")
+    req2 = urllib.request.Request(token_endpoint, data=post, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded", "User-Agent": "TydomApp/4.17.41"})
+    with urllib.request.urlopen(req2, timeout=15) as r:
+        return json.loads(r.read().decode())["access_token"]
 
 
-def suche_passwort_rekursiv(obj, tiefe=0):
-    """Durchsucht ein JSON-Objekt rekursiv nach Passwort-Feldern."""
-    passwort_felder = {"password", "pin", "gateway_password", "gatewayPassword",
-                       "gateway_pin", "credentials", "secret", "passwd", "pwd",
-                       "tydom_password", "accessCode"}
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            if k.lower() in passwort_felder and isinstance(v, str):
-                return k, v
-        for k, v in obj.items():
-            ergebnis = suche_passwort_rekursiv(v, tiefe + 1)
-            if ergebnis:
-                return ergebnis
-    elif isinstance(obj, list):
-        for item in obj:
-            ergebnis = suche_passwort_rekursiv(item, tiefe + 1)
-            if ergebnis:
-                return ergebnis
-    return None
+def gateway_passwort(access_token):
+    req = urllib.request.Request(
+        DELTADORE_API_SITES + TYDOM_MAC,
+        headers={"Authorization": f"Bearer {access_token}", "User-Agent": "TydomApp/4.17.41"})
+    with urllib.request.urlopen(req, timeout=15) as r:
+        data = json.loads(r.read().decode())
+    # Rekursiv nach 'password' suchen
+    def suche(obj):
+        if isinstance(obj, dict):
+            if "password" in obj and isinstance(obj["password"], str):
+                return obj["password"]
+            for v in obj.values():
+                r = suche(v)
+                if r: return r
+        elif isinstance(obj, list):
+            for item in obj:
+                r = suche(item)
+                if r: return r
+        return None
+    return suche(data)
 
 
-def stufe2_gateway_passwort(access_token):
-    print("\n" + "=" * 60)
-    print("STUFE 2: Gateway-Passwort von Delta Dore API holen")
-    print("=" * 60)
-
-    site_id = None
-    gw_passwort = None
-
-    # 2a: Sites-API mit MAC-Filter
-    url = DELTADORE_API_SITES + TYDOM_MAC
-    print(f"\n2a) {url}")
-    try:
-        antwort = api_get(url, access_token)
-        print("Vollstaendige Antwort:")
-        print(json.dumps(antwort, indent=2, ensure_ascii=False))
-
-        # Site-ID merken fuer weitere Abfragen
-        sites = antwort.get("sites", antwort if isinstance(antwort, list) else [])
-        if sites:
-            site_id = sites[0].get("id")
-
-        # Rekursiv nach Passwort suchen
-        ergebnis = suche_passwort_rekursiv(antwort)
-        if ergebnis:
-            feld, gw_passwort = ergebnis
-            print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
-            return gw_passwort
-
-    except Exception as e:
-        print(f"Fehler: {type(e).__name__}: {e}")
-
-    # 2b: Sites ohne Filter (alle Sites)
-    url2 = "https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites"
-    print(f"\n2b) {url2}")
-    try:
-        antwort2 = api_get(url2, access_token)
-        print(json.dumps(antwort2, indent=2, ensure_ascii=False)[:800])
-        ergebnis = suche_passwort_rekursiv(antwort2)
-        if ergebnis:
-            feld, gw_passwort = ergebnis
-            print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
-            return gw_passwort
-    except Exception as e:
-        print(f"Fehler: {type(e).__name__}: {e}")
-
-    # 2c: Site-spezifische Gateway-Abfrage (falls site_id bekannt)
-    if site_id:
-        for pfad in [
-            f"https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites/{site_id}/gateways",
-            f"https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites/{site_id}/gateways/{TYDOM_MAC}",
-            f"https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites/{site_id}",
-        ]:
-            print(f"\n2c) {pfad}")
-            try:
-                antwort3 = api_get(pfad, access_token)
-                print(json.dumps(antwort3, indent=2, ensure_ascii=False)[:500])
-                ergebnis = suche_passwort_rekursiv(antwort3)
-                if ergebnis:
-                    feld, gw_passwort = ergebnis
-                    print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
-                    return gw_passwort
-            except Exception as e:
-                print(f"Fehler: {type(e).__name__}: {e}")
-
-    # 2d: Pilotage-Service
-    url4 = f"https://pilotage.iotdeltadore.com/pilotageservice/api/v1/control/gateways/{TYDOM_MAC}"
-    print(f"\n2d) {url4}")
-    try:
-        antwort4 = api_get(url4, access_token)
-        print(json.dumps(antwort4, indent=2, ensure_ascii=False)[:500])
-        ergebnis = suche_passwort_rekursiv(antwort4)
-        if ergebnis:
-            feld, gw_passwort = ergebnis
-            print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
-            return gw_passwort
-    except Exception as e:
-        print(f"Fehler: {type(e).__name__}: {e}")
-
-    print("\nKein Gateway-Passwort gefunden.")
-    return None
-
-
-# ─────────────────────────────────────────────
-# STUFE 3: Digest-Challenge + WebSocket
-# ─────────────────────────────────────────────
-def stufe3a_challenge_holen():
-    print("\n" + "=" * 60)
-    print("STUFE 3a: Digest-Challenge holen")
-    print("=" * 60)
-
+def digest_challenge():
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
-
-    req = urllib.request.Request(
-        TYDOM_HTTPS,
-        headers={"User-Agent": "TydomApp/4.17.41"},
-    )
+    req = urllib.request.Request(TYDOM_HTTPS, headers={"User-Agent": "TydomApp/4.17.41"})
     try:
         urllib.request.urlopen(req, context=ssl_ctx, timeout=10)
-        print("Unerwartete 200-Antwort")
-        return None
     except urllib.error.HTTPError as e:
         www_auth = e.headers.get("WWW-Authenticate", "")
-        print(f"HTTP {e.code}")
-        print(f"WWW-Authenticate: {www_auth}")
         if e.code == 401 and "Digest" in www_auth:
-            params = parse_www_authenticate(www_auth)
-            print(f"realm = {params.get('realm')}")
-            print(f"qop   = {params.get('qop')}")
-            print(f"nonce = {params.get('nonce', '')[:20]}...")
-            return params
-        return None
-    except Exception as e:
-        print(f"FEHLER: {type(e).__name__}: {e}")
-        return None
+            return parse_www_authenticate(www_auth)
+    return None
 
 
-async def stufe3b_websocket(gw_passwort, challenge_params):
-    print("\n" + "=" * 60)
-    print("STUFE 3b: WebSocket-Verbindung mit Gateway-Passwort")
-    print("=" * 60)
+def http_anfrage(methode, pfad, body=""):
+    laenge = len(body.encode("utf-8")) if body else 0
+    return (
+        f"{methode} {pfad} HTTP/1.1\r\n"
+        f"Content-Length: {laenge}\r\n"
+        f"Content-Type: application/json; charset=UTF-8\r\n"
+        f"Transac-Id: 0\r\n"
+        f"\r\n{body}"
+    )
 
+
+async def tydom_lesen(gw_passwort, challenge):
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
-
     uri_pfad = f"/mediation/client?mac={TYDOM_MAC}&appli=1"
-    auth = berechne_digest(TYDOM_MAC, gw_passwort, challenge_params, uri_pfad)
+    auth = berechne_digest(TYDOM_MAC, gw_passwort, challenge, uri_pfad)
 
-    print(f"username = {TYDOM_MAC}")
-    print(f"password = {str(gw_passwort)[:4]}***")
+    async with websockets.connect(
+        TYDOM_WSS,
+        additional_headers={"Authorization": auth, "User-Agent": "TydomApp/4.17.41"},
+        ssl=ssl_ctx, open_timeout=15, ping_interval=None,
+    ) as ws:
+        print("Verbunden mit TYDOM.\n")
 
-    try:
-        async with websockets.connect(
-            TYDOM_WSS,
-            additional_headers={
-                "Authorization": auth,
-                "User-Agent": "TydomApp/4.17.41",
-            },
-            ssl=ssl_ctx,
-            open_timeout=15,
-            ping_interval=None,
-        ) as ws:
-            print("\n>>> VERBINDUNG ERFOLGREICH! <<<")
-
-            anfrage = (
-                "GET /devices/data HTTP/1.1\r\n"
-                "Content-Length: 0\r\n"
-                "Content-Type: application/json; charset=UTF-8\r\n"
-                "Transac-Id: 0\r\n"
-                "\r\n"
-            )
-            await ws.send(anfrage)
-
+        # ── Geraete lesen ────────────────────────────────
+        print("=" * 60)
+        print("GET /devices/data – alle Geraete und Zustande")
+        print("=" * 60)
+        await ws.send(http_anfrage("GET", "/devices/data"))
+        raw = await asyncio.wait_for(ws.recv(), timeout=10)
+        text = raw if isinstance(raw, str) else raw.decode()
+        if "\r\n\r\n" in text:
+            body = text.split("\r\n\r\n", 1)[1]
             try:
-                antwort = await asyncio.wait_for(ws.recv(), timeout=10)
-                text = antwort if isinstance(antwort, str) else antwort.decode()
-                if "\r\n\r\n" in text:
-                    body = text.split("\r\n\r\n", 1)[1]
-                    try:
-                        daten = json.loads(body)
-                        print(f"Geraete: {json.dumps(daten, ensure_ascii=False)[:500]}")
-                    except json.JSONDecodeError:
-                        print(f"Antwort: {body[:300]}")
-                else:
-                    print(f"Antwort: {text[:300]}")
-            except asyncio.TimeoutError:
-                print("Timeout beim Lesen – Verbindung steht!")
-            return True
+                geraete = json.loads(body)
+                # Alle Geraete ausgeben
+                for g in (geraete if isinstance(geraete, list) else [geraete]):
+                    gid   = g.get("id", "?")
+                    gname = g.get("name", "?")
+                    gtype = g.get("type", "?")
+                    print(f"\nGeraet: '{gname}'  id={gid}  type={gtype}")
+                    for ep in g.get("endpoints", []):
+                        eid   = ep.get("id", "?")
+                        etype = ep.get("type", "?")
+                        print(f"  Endpunkt id={eid}  type={etype}")
+                        for dp in ep.get("cdata", []):
+                            print(f"    {dp.get('name','?')} = {dp.get('value','?')}  (type: {dp.get('type','?')})")
+            except json.JSONDecodeError:
+                print(body[:500])
+        else:
+            print(text[:300])
 
-    except Exception as e:
-        fehler = str(e)
-        print(f"-> {type(e).__name__}: {fehler[:200]}")
-        return False
+        # ── Szenen / Szenarien lesen ──────────────────────
+        print("\n" + "=" * 60)
+        print("GET /scenarios/data – Szenen (fuer Ein/Aus-Schaltung)")
+        print("=" * 60)
+        await ws.send(http_anfrage("GET", "/scenarios/data"))
+        try:
+            raw2 = await asyncio.wait_for(ws.recv(), timeout=8)
+            text2 = raw2 if isinstance(raw2, str) else raw2.decode()
+            if "\r\n\r\n" in text2:
+                body2 = text2.split("\r\n\r\n", 1)[1]
+                try:
+                    szenen = json.loads(body2)
+                    for s in (szenen if isinstance(szenen, list) else [szenen]):
+                        print(f"Szene: '{s.get('name','?')}'  id={s.get('id','?')}")
+                except json.JSONDecodeError:
+                    print(body2[:300])
+        except asyncio.TimeoutError:
+            print("(keine Szenen-Antwort)")
+
+        print("\n" + "=" * 60)
+        print("Alle Daten gelesen.")
+        print("=" * 60)
 
 
-# ─────────────────────────────────────────────
-# MAIN
-# ─────────────────────────────────────────────
 async def main():
     email    = os.environ.get("TYDOM_EMAIL", "")
     passwort = os.environ.get("TYDOM_PASSWORD", "")
-
     if not email or not passwort:
         print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print("TYDOM Discovery v7 – OAuth2 + Gateway-Passwort + Digest Auth")
-    print(f"MAC:   {TYDOM_MAC}")
-    print(f"Email: {email[:4]}***")
+    print("TYDOM Discovery v8 – Geraete und Endpunkte lesen")
+    print(f"MAC: {TYDOM_MAC}")
 
-    # Stufe 1: OAuth2-Token
-    access_token = stufe1_oauth2_token(email, passwort)
-    if not access_token:
-        print("\nOAuth2-Login fehlgeschlagen – Abbruch.")
-        return
+    print("\nSchritt 1: OAuth2-Token...")
+    token = oauth2_token(email, passwort)
+    print("OK")
 
-    # Stufe 2: Gateway-Passwort
-    gw_passwort = stufe2_gateway_passwort(access_token)
-    if not gw_passwort:
-        print("\nGateway-Passwort nicht gefunden – Abbruch.")
-        return
+    print("Schritt 2: Gateway-Passwort...")
+    gw_pw = gateway_passwort(token)
+    print(f"OK ({gw_pw[:4]}***)")
 
-    # Stufe 3: Digest-Challenge + WebSocket
-    challenge = stufe3a_challenge_holen()
-    if not challenge:
-        print("\nKeine Digest-Challenge erhalten – Abbruch.")
-        return
+    print("Schritt 3: Digest-Challenge...")
+    challenge = digest_challenge()
+    print(f"OK (realm={challenge.get('realm')})")
 
-    ok = await stufe3b_websocket(gw_passwort, challenge)
-
-    print("\n" + "=" * 60)
-    if ok:
-        print("ERGEBNIS: VERBINDUNG ERFOLGREICH!")
-        print("TYDOM-Steuerung kann jetzt in main.py eingebaut werden.")
-    else:
-        print("ERGEBNIS: Verbindung fehlgeschlagen.")
-    print("=" * 60)
+    print("Schritt 4: Geraete lesen...\n")
+    await tydom_lesen(gw_pw, challenge)
 
 
 if __name__ == "__main__":
