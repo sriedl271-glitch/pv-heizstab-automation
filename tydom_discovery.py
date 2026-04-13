@@ -160,71 +160,121 @@ def stufe1_oauth2_token(email, passwort):
 # ─────────────────────────────────────────────
 # STUFE 2: Gateway-Passwort holen
 # ─────────────────────────────────────────────
+def api_get(url, access_token):
+    """Hilfsfunktion: GET-Request mit Bearer Token."""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "User-Agent": "TydomApp/4.17.41",
+            "Accept": "application/json",
+        },
+    )
+    with urllib.request.urlopen(req, timeout=15) as r:
+        return json.loads(r.read().decode())
+
+
+def suche_passwort_rekursiv(obj, tiefe=0):
+    """Durchsucht ein JSON-Objekt rekursiv nach Passwort-Feldern."""
+    passwort_felder = {"password", "pin", "gateway_password", "gatewayPassword",
+                       "gateway_pin", "credentials", "secret", "passwd", "pwd",
+                       "tydom_password", "accessCode"}
+    if isinstance(obj, dict):
+        for k, v in obj.items():
+            if k.lower() in passwort_felder and isinstance(v, str):
+                return k, v
+        for k, v in obj.items():
+            ergebnis = suche_passwort_rekursiv(v, tiefe + 1)
+            if ergebnis:
+                return ergebnis
+    elif isinstance(obj, list):
+        for item in obj:
+            ergebnis = suche_passwort_rekursiv(item, tiefe + 1)
+            if ergebnis:
+                return ergebnis
+    return None
+
+
 def stufe2_gateway_passwort(access_token):
     print("\n" + "=" * 60)
     print("STUFE 2: Gateway-Passwort von Delta Dore API holen")
     print("=" * 60)
 
+    site_id = None
+    gw_passwort = None
+
+    # 2a: Sites-API mit MAC-Filter
     url = DELTADORE_API_SITES + TYDOM_MAC
-    print(f"URL: {url}")
-
+    print(f"\n2a) {url}")
     try:
-        req = urllib.request.Request(
-            url,
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "User-Agent": "TydomApp/4.17.41",
-            },
-        )
-        with urllib.request.urlopen(req, timeout=15) as r:
-            antwort = json.loads(r.read().decode())
+        antwort = api_get(url, access_token)
+        print("Vollstaendige Antwort:")
+        print(json.dumps(antwort, indent=2, ensure_ascii=False))
 
-        print(f"API-Antwort (vollstaendig):")
-        print(json.dumps(antwort, indent=2, ensure_ascii=False)[:1000])
+        # Site-ID merken fuer weitere Abfragen
+        sites = antwort.get("sites", antwort if isinstance(antwort, list) else [])
+        if sites:
+            site_id = sites[0].get("id")
 
-        # Gateway-Passwort aus Antwort extrahieren
-        gw_passwort = None
+        # Rekursiv nach Passwort suchen
+        ergebnis = suche_passwort_rekursiv(antwort)
+        if ergebnis:
+            feld, gw_passwort = ergebnis
+            print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
+            return gw_passwort
 
-        # Verschiedene moegliche Feldnamen probieren
-        if isinstance(antwort, list) and len(antwort) > 0:
-            site = antwort[0]
-        elif isinstance(antwort, dict):
-            site = antwort
-        else:
-            site = {}
-
-        # Suche nach Passwort-Feldern
-        for feld in ["gateway_password", "password", "pin", "gatewayPassword",
-                     "gateway_pin", "credentials", "secret"]:
-            if feld in site:
-                gw_passwort = site[feld]
-                print(f"\nGateway-Passwort gefunden: Feld '{feld}' = {str(gw_passwort)[:4]}***")
-                break
-
-        # In verschachtelten Strukturen suchen
-        if not gw_passwort and "gateways" in site:
-            for gw in site.get("gateways", []):
-                for feld in ["password", "pin", "gateway_password", "credentials"]:
-                    if feld in gw:
-                        gw_passwort = gw[feld]
-                        print(f"\nGateway-Passwort gefunden (in gateways): '{feld}' = {str(gw_passwort)[:4]}***")
-                        break
-                if gw_passwort:
-                    break
-
-        if not gw_passwort:
-            print("\nKein Passwort-Feld gefunden!")
-            print("Bitte pruefe die vollstaendige Ausgabe oben.")
-
-        return gw_passwort
-
-    except urllib.error.HTTPError as e:
-        fehler_body = e.read().decode()
-        print(f"HTTP {e.code}: {fehler_body[:300]}")
-        return None
     except Exception as e:
-        print(f"FEHLER: {type(e).__name__}: {e}")
-        return None
+        print(f"Fehler: {type(e).__name__}: {e}")
+
+    # 2b: Sites ohne Filter (alle Sites)
+    url2 = "https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites"
+    print(f"\n2b) {url2}")
+    try:
+        antwort2 = api_get(url2, access_token)
+        print(json.dumps(antwort2, indent=2, ensure_ascii=False)[:800])
+        ergebnis = suche_passwort_rekursiv(antwort2)
+        if ergebnis:
+            feld, gw_passwort = ergebnis
+            print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
+            return gw_passwort
+    except Exception as e:
+        print(f"Fehler: {type(e).__name__}: {e}")
+
+    # 2c: Site-spezifische Gateway-Abfrage (falls site_id bekannt)
+    if site_id:
+        for pfad in [
+            f"https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites/{site_id}/gateways",
+            f"https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites/{site_id}/gateways/{TYDOM_MAC}",
+            f"https://prod.iotdeltadore.com/sitesmanagement/api/v1/sites/{site_id}",
+        ]:
+            print(f"\n2c) {pfad}")
+            try:
+                antwort3 = api_get(pfad, access_token)
+                print(json.dumps(antwort3, indent=2, ensure_ascii=False)[:500])
+                ergebnis = suche_passwort_rekursiv(antwort3)
+                if ergebnis:
+                    feld, gw_passwort = ergebnis
+                    print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
+                    return gw_passwort
+            except Exception as e:
+                print(f"Fehler: {type(e).__name__}: {e}")
+
+    # 2d: Pilotage-Service
+    url4 = f"https://pilotage.iotdeltadore.com/pilotageservice/api/v1/control/gateways/{TYDOM_MAC}"
+    print(f"\n2d) {url4}")
+    try:
+        antwort4 = api_get(url4, access_token)
+        print(json.dumps(antwort4, indent=2, ensure_ascii=False)[:500])
+        ergebnis = suche_passwort_rekursiv(antwort4)
+        if ergebnis:
+            feld, gw_passwort = ergebnis
+            print(f"\nPasswort gefunden: '{feld}' = {gw_passwort[:4]}***")
+            return gw_passwort
+    except Exception as e:
+        print(f"Fehler: {type(e).__name__}: {e}")
+
+    print("\nKein Gateway-Passwort gefunden.")
+    return None
 
 
 # ─────────────────────────────────────────────
