@@ -5,7 +5,7 @@ from datetime import datetime
 import requests
 
 STATUS_DATEI = "status.json"
-ISOLARCLOUD_API_URL = "https://gateway.isolarcloud.com.hk"
+ISOLARCLOUD_API_URL = "https://gateway.isolarcloud.eu"
 
 # Messpunkt-IDs für iSolarCloud Echtdaten
 MESSPUNKT_BATTERIE_SOC = "83252"  # Batterie-Ladestand (SOC) in %
