@@ -1,9 +1,7 @@
 """
-TYDOM Discovery Script
-Verbindet sich mit dem TYDOM Home über die Delta Dore Cloud
-und gibt alle Geräte, Endpunkte und Szenarien aus.
-
-Wird einmalig ausgeführt um die Geräte-IDs zu ermitteln.
+TYDOM Discovery Script - Version 2
+Verbindet sich mit dem TYDOM Home ueber die Delta Dore Cloud
+und gibt alle Geraete, Endpunkte und Szenarien aus.
 """
 import asyncio
 import base64
@@ -17,14 +15,9 @@ import websockets
 
 TYDOM_MAC = "001A25067773"
 TYDOM_URL = f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
-TYDOM_LOCAL_IP = "192.168.178.24"
-TYDOM_LOCAL_URL = f"wss://{TYDOM_LOCAL_IP}/mediation/client?mac={TYDOM_MAC}&appli=1"
 
 
 def erstelle_auth_header(email: str, passwort: str) -> str:
-    """
-    TYDOM-Authentifizierung: email:md5(passwort) als Base64
-    """
     passwort_md5 = hashlib.md5(passwort.encode("utf-8")).hexdigest()
     credentials = f"{email}:{passwort_md5}"
     encoded = base64.b64encode(credentials.encode("utf-8")).decode("utf-8")
@@ -32,11 +25,7 @@ def erstelle_auth_header(email: str, passwort: str) -> str:
 
 
 def erstelle_http_anfrage(methode: str, pfad: str, body: str = "") -> str:
-    """
-    Erstellt eine HTTP-formatierte Nachricht für den TYDOM WebSocket-Tunnel.
-    """
-    body_bytes = body.encode("utf-8") if body else b""
-    laenge = len(body_bytes)
+    laenge = len(body.encode("utf-8")) if body else 0
     anfrage = (
         f"{methode} {pfad} HTTP/1.1\r\n"
         f"Content-Length: {laenge}\r\n"
@@ -49,160 +38,175 @@ def erstelle_http_anfrage(methode: str, pfad: str, body: str = "") -> str:
     return anfrage
 
 
-def parse_antwort(rohdaten: str) -> dict | None:
-    """
-    Parst die HTTP-formatierte Antwort aus dem WebSocket-Tunnel.
-    Gibt den JSON-Body zurück oder None bei Fehler.
-    """
+def parse_antwort(rohdaten: str) -> object:
     try:
-        # Header und Body trennen
         if "\r\n\r\n" in rohdaten:
             _, body = rohdaten.split("\r\n\r\n", 1)
         else:
             body = rohdaten
-
-        if body.strip():
+        body = body.strip()
+        if body:
             return json.loads(body)
         return None
     except Exception as fehler:
-        print(f"Parsing-Fehler: {fehler}")
-        print(f"Rohdaten (erste 500 Zeichen): {rohdaten[:500]}")
+        print(f"  Parse-Fehler: {fehler}")
+        print(f"  Rohdaten: {rohdaten[:300]}")
         return None
 
 
-async def verbinde_und_erkunde(url: str, auth: str, ssl_kontext=None) -> bool:
-    """
-    Verbindet sich mit TYDOM und gibt alle Geräte/Szenarien aus.
-    Gibt True zurück wenn erfolgreich.
-    """
+async def lese_nachrichten(ws, anzahl=5, timeout=8):
+    """Liest bis zu 'anzahl' Nachrichten mit Timeout."""
+    nachrichten = []
+    try:
+        for _ in range(anzahl):
+            msg = await asyncio.wait_for(ws.recv(), timeout=timeout)
+            if isinstance(msg, bytes):
+                msg = msg.decode("utf-8")
+            nachrichten.append(msg)
+    except asyncio.TimeoutError:
+        pass
+    except Exception as e:
+        print(f"  Lesefehler: {e}")
+    return nachrichten
+
+
+async def sende_anfrage(ws, methode: str, pfad: str, body: str = "") -> str:
+    """Sendet eine Anfrage und liest die Antwort."""
+    anfrage = erstelle_http_anfrage(methode, pfad, body)
+    await ws.send(anfrage)
+    antwort_teile = await lese_nachrichten(ws, anzahl=8, timeout=10)
+    return "".join(antwort_teile)
+
+
+async def verbinde_tydom(url: str, headers: dict, ssl_kontext=None) -> bool:
     print(f"\n{'='*60}")
-    print(f"Verbinde mit: {url}")
+    print(f"Verbinde: {url}")
     print(f"{'='*60}")
 
-    headers = {
-        "Authorization": auth,
-        "Connection": "Upgrade",
-        "Upgrade": "websocket",
+    connect_kwargs = {
+        "additional_headers": headers,
+        "open_timeout": 20,
+        "ping_interval": None,
+        "ping_timeout": None,
     }
+    if ssl_kontext:
+        connect_kwargs["ssl"] = ssl_kontext
 
     try:
-        kwargs = {
-            "additional_headers": headers,
-            "open_timeout": 15,
-            "ping_interval": None,
-        }
-        if ssl_kontext:
-            kwargs["ssl"] = ssl_kontext
+        async with websockets.connect(url, **connect_kwargs) as ws:
+            print("OK - WebSocket verbunden")
 
-        async with websockets.connect(url, **kwargs) as ws:
-            print("✓ WebSocket-Verbindung hergestellt")
+            # Initiale Nachrichten lesen
+            init_msgs = await lese_nachrichten(ws, anzahl=3, timeout=4)
+            if init_msgs:
+                print(f"  {len(init_msgs)} initiale Nachrichten empfangen")
 
-            # Initiale Nachrichten lesen (TYDOM sendet beim Connect oft Daten)
-            initiale_nachrichten = []
-            try:
-                for _ in range(3):
-                    msg = await asyncio.wait_for(ws.recv(), timeout=3)
-                    initiale_nachrichten.append(msg)
-                    print(f"  Initiale Nachricht empfangen ({len(msg)} Bytes)")
-            except asyncio.TimeoutError:
-                pass
-
-            # Geräte abfragen
-            print("\n--- Geraete-Abfrage (/devices/data) ---")
-            anfrage = erstelle_http_anfrage("GET", "/devices/data")
-            await ws.send(anfrage)
-
-            antwort_text = ""
-            try:
-                for _ in range(5):
-                    chunk = await asyncio.wait_for(ws.recv(), timeout=10)
-                    antwort_text += chunk if isinstance(chunk, str) else chunk.decode("utf-8")
-                    if "}" in antwort_text:
-                        break
-            except asyncio.TimeoutError:
-                pass
-
-            daten = parse_antwort(antwort_text)
+            # 1. Geraete-Konfiguration
+            print("\n--- Anfrage: /configs/file ---")
+            antwort = await sende_anfrage(ws, "GET", "/configs/file")
+            daten = parse_antwort(antwort)
             if daten:
-                print(f"\nGefundene Geraete: {len(daten) if isinstance(daten, list) else 'Siehe JSON'}")
-                print("\nVOLLSTAENDIGE GERAETE-DATEN:")
-                print(json.dumps(daten, indent=2, ensure_ascii=False))
-
-                # Zusammenfassung der Geraete
-                if isinstance(daten, list):
-                    print("\n--- GERAETE-ZUSAMMENFASSUNG ---")
-                    for geraet in daten:
-                        geraet_id = geraet.get("id", "?")
-                        name = geraet.get("name", "?")
-                        endpoints = geraet.get("endpoints", [])
-                        print(f"\nGeraet: '{name}' | ID: {geraet_id}")
-                        for ep in endpoints:
-                            ep_id = ep.get("id", "?")
-                            ep_name = ep.get("name", "?")
-                            typen = [u.get("name") for u in ep.get("cstatus", [])]
-                            print(f"  Endpoint: '{ep_name}' | ID: {ep_id} | Typen: {typen}")
+                print("CONFIGS/FILE DATEN:")
+                print(json.dumps(daten, indent=2, ensure_ascii=False)[:3000])
             else:
-                print("Keine Daten empfangen oder Parsing fehlgeschlagen")
-                print(f"Rohantwort: {antwort_text[:1000]}")
+                print(f"Keine Daten. Rohantwort: {antwort[:400]}")
 
-            # Szenarien abfragen
-            print("\n--- Szenarien-Abfrage (/scenarios) ---")
-            anfrage2 = erstelle_http_anfrage("GET", "/scenarios/file")
-            await ws.send(anfrage2)
+            # 2. Geraete-Daten
+            print("\n--- Anfrage: /devices/data ---")
+            antwort2 = await sende_anfrage(ws, "GET", "/devices/data")
+            daten2 = parse_antwort(antwort2)
+            if daten2:
+                print("DEVICES/DATA DATEN:")
+                print(json.dumps(daten2, indent=2, ensure_ascii=False)[:3000])
 
-            antwort2 = ""
-            try:
-                for _ in range(5):
-                    chunk = await asyncio.wait_for(ws.recv(), timeout=10)
-                    antwort2 += chunk if isinstance(chunk, str) else chunk.decode("utf-8")
-                    if "}" in antwort2:
-                        break
-            except asyncio.TimeoutError:
-                pass
-
-            szenarien_daten = parse_antwort(antwort2)
-            if szenarien_daten:
-                print("\nVOLLSTAENDIGE SZENARIEN-DATEN:")
-                print(json.dumps(szenarien_daten, indent=2, ensure_ascii=False))
+                # Zusammenfassung
+                if isinstance(daten2, list):
+                    print("\n--- GERAETE ZUSAMMENFASSUNG ---")
+                    for g in daten2:
+                        print(f"\nGeraet: '{g.get('name','?')}' | ID: {g.get('id','?')}")
+                        for ep in g.get("endpoints", []):
+                            typen = [s.get("name") for s in ep.get("cstatus", [])]
+                            print(f"  Endpoint ID: {ep.get('id','?')} | Name: {ep.get('name','?')} | Typen: {typen}")
             else:
-                print(f"Rohantwort Szenarien: {antwort2[:500]}")
+                print(f"Keine Daten. Rohantwort: {antwort2[:400]}")
+
+            # 3. Szenarien
+            print("\n--- Anfrage: /scenarios/file ---")
+            antwort3 = await sende_anfrage(ws, "GET", "/scenarios/file")
+            daten3 = parse_antwort(antwort3)
+            if daten3:
+                print("SCENARIOS DATEN:")
+                print(json.dumps(daten3, indent=2, ensure_ascii=False)[:3000])
+            else:
+                print(f"Keine Daten. Rohantwort: {antwort3[:400]}")
+
+            # 4. Momentane Geraete-Status
+            print("\n--- Anfrage: /devices/cdata ---")
+            antwort4 = await sende_anfrage(ws, "GET", "/devices/cdata")
+            daten4 = parse_antwort(antwort4)
+            if daten4:
+                print("DEVICES/CDATA:")
+                print(json.dumps(daten4, indent=2, ensure_ascii=False)[:3000])
+            else:
+                print(f"Rohantwort: {antwort4[:400]}")
 
             return True
 
-    except websockets.exceptions.InvalidStatusCode as e:
-        print(f"✗ Verbindungsfehler - HTTP Status: {e.status_code}")
-        if e.status_code == 401:
-            print("  → Authentifizierung fehlgeschlagen (falsches Passwort / E-Mail)")
-        elif e.status_code == 403:
-            print("  → Zugriff verweigert")
-        return False
-    except Exception as fehler:
-        print(f"✗ Fehler: {type(fehler).__name__}: {fehler}")
+    except Exception as e:
+        fehler_typ = type(e).__name__
+        print(f"FEHLER: {fehler_typ}: {e}")
+
+        # HTTP-Statuscode aus Fehler extrahieren
+        fehler_str = str(e)
+        if "401" in fehler_str:
+            print("  -> HTTP 401: Zugangsdaten falsch (E-Mail oder Passwort)")
+        elif "400" in fehler_str:
+            print("  -> HTTP 400: Anfrage-Format fehlerhaft")
+        elif "403" in fehler_str:
+            print("  -> HTTP 403: Zugriff verweigert")
+        elif "404" in fehler_str:
+            print("  -> HTTP 404: Endpunkt nicht gefunden")
         return False
 
 
 async def main():
-    email = os.environ.get("TYDOM_EMAIL")
-    passwort = os.environ.get("TYDOM_PASSWORD")
+    email = os.environ.get("TYDOM_EMAIL", "")
+    passwort = os.environ.get("TYDOM_PASSWORD", "")
 
     if not email or not passwort:
-        print("✗ TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
+        print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print(f"TYDOM Discovery - MAC: {TYDOM_MAC}")
-    print(f"E-Mail: {email}")
+    print(f"TYDOM Discovery v2")
+    print(f"MAC:   {TYDOM_MAC}")
+    print(f"Email: {email[:4]}***")
+    print(f"URL:   {TYDOM_URL}")
 
-    auth = erstelle_auth_header(email, passwort)
+    # Versuch 1: MD5-Passwort (Standard TYDOM)
+    print("\n=== Versuch 1: Basic Auth mit MD5-Passwort ===")
+    auth_md5 = erstelle_auth_header(email, passwort)
+    headers_v1 = {
+        "Authorization": auth_md5,
+        "x-ssl-client-dn": f"emailAddress={email}",
+    }
+    ok = await verbinde_tydom(TYDOM_URL, headers_v1)
 
-    # Zuerst Cloud-Verbindung versuchen
-    cloud_erfolgreich = await verbinde_und_erkunde(TYDOM_URL, auth)
+    if not ok:
+        # Versuch 2: Klartext-Passwort (ohne MD5)
+        print("\n=== Versuch 2: Basic Auth mit Klartext-Passwort ===")
+        credentials_plain = base64.b64encode(f"{email}:{passwort}".encode()).decode()
+        auth_plain = f"Basic {credentials_plain}"
+        headers_v2 = {
+            "Authorization": auth_plain,
+            "x-ssl-client-dn": f"emailAddress={email}",
+        }
+        ok = await verbinde_tydom(TYDOM_URL, headers_v2)
 
-    if not cloud_erfolgreich:
-        print("\n--- Cloud-Verbindung fehlgeschlagen, versuche lokale Verbindung ---")
-        ssl_kontext = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-        ssl_kontext.check_hostname = False
-        ssl_kontext.verify_mode = ssl.CERT_NONE
-        await verbinde_und_erkunde(TYDOM_LOCAL_URL, auth, ssl_kontext)
+    if not ok:
+        # Versuch 3: Ohne x-ssl-client-dn Header
+        print("\n=== Versuch 3: Nur Authorization Header ===")
+        headers_v3 = {"Authorization": auth_md5}
+        await verbinde_tydom(TYDOM_URL, headers_v3)
 
 
 if __name__ == "__main__":
