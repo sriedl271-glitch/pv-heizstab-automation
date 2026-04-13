@@ -7,11 +7,13 @@ import requests
 STATUS_DATEI = "status.json"
 ISOLARCLOUD_API_URL = "https://gateway.isolarcloud.eu"
 
-# Messpunkt-IDs für iSolarCloud Echtdaten
-MESSPUNKT_BATTERIE_SOC = "83252"  # Batterie-Ladestand (SOC) in %
-MESSPUNKT_PV_LEISTUNG = "83067"   # PV-Gesamtleistung in W
-MESSPUNKT_HAUSVERBRAUCH = "83106" # Hausverbrauch (Load Power) in W
-MESSPUNKT_NETZ = "83549"          # Netzleistung in W (positiv = Bezug, negativ = Einspeisung)
+# Messpunkt-IDs für Energy Storage System (V1, Hybrid-Wechselrichter mit Batterie)
+MESSPUNKT_BATTERIE_SOC = "13141"    # Batterie-Ladestand (SOC) in %
+MESSPUNKT_HAUSVERBRAUCH = "13119"   # Hausverbrauch (Load Power) in W
+MESSPUNKT_NETZBEZUG = "13149"       # Netzbezug (Purchased Power) in W
+MESSPUNKT_EINSPEISUNG = "13121"     # Einspeisung (Feed-in Power) in W
+MESSPUNKT_BAT_LADEN = "13126"       # Batterie Ladeleistung in W
+MESSPUNKT_BAT_ENTLADEN = "13150"    # Batterie Entladeleistung in W
 
 
 def lade_status() -> dict:
@@ -176,9 +178,80 @@ def isolarcloud_get_ps_id(app_key: str, secret_key: str, token: str):
         return None
 
 
+def isolarcloud_get_device_info(app_key: str, secret_key: str, token: str, ps_id: str):
+    """
+    Ruft die Geräteliste der Anlage ab und gibt ps_key und device_type
+    des Hybrid-Wechselrichters (Energy Storage System) zurück.
+    Gibt (None, None) bei Fehler zurück.
+    """
+    url = f"{ISOLARCLOUD_API_URL}/openapi/getDeviceList"
+    headers = {
+        "Content-Type": "application/json;charset=UTF-8",
+        "x-access-key": secret_key,
+        "sys_code": "901",
+    }
+    body = {
+        "appkey": app_key,
+        "token": token,
+        "ps_id": ps_id,
+        "curPage": 1,
+        "size": 50,
+        "is_virtual_unit": "0",
+    }
+    try:
+        antwort = requests.post(url, json=body, headers=headers, timeout=15)
+        daten = antwort.json()
+        if daten.get("result_code") == "1":
+            geraete = daten["result_data"]["pageList"]
+            print(f"✅ Geräteliste erhalten: {len(geraete)} Gerät(e)")
+            for g in geraete:
+                print(
+                    f"   → Typ {g.get('device_type'):>3}: "
+                    f"{g.get('device_name')} | "
+                    f"ps_key={g.get('ps_key')} | "
+                    f"Modell={g.get('device_model_code')}"
+                )
+
+            # ESS / Hybrid-Wechselrichter bevorzugt (Typ 14)
+            for g in geraete:
+                if g.get("device_type") == 14:
+                    print(f"✅ ESS-Gerät gefunden (Typ 14): {g.get('device_name')}")
+                    return g.get("ps_key"), 14
+
+            # Fallback: Typ 22
+            for g in geraete:
+                if g.get("device_type") == 22:
+                    print(f"✅ ESS-Gerät gefunden (Typ 22): {g.get('device_name')}")
+                    return g.get("ps_key"), 22
+
+            # Fallback: erstes Gerät das kein reiner Wechselrichter (1) oder
+            # Kommunikationsgerät (64, 3, 11, 17) ist
+            for g in geraete:
+                typ = g.get("device_type")
+                if typ not in [1, 3, 11, 17, 64]:
+                    print(f"⚠️ Kein Typ 14/22 gefunden, verwende Typ {typ}: {g.get('device_name')}")
+                    return g.get("ps_key"), typ
+
+            # Letzter Fallback: erstes verfügbares Gerät
+            if geraete:
+                g = geraete[0]
+                print(f"⚠️ Fallback auf erstes Gerät Typ {g.get('device_type')}: {g.get('device_name')}")
+                return g.get("ps_key"), g.get("device_type")
+
+            print("❌ Keine Geräte in der Anlage gefunden.")
+            return None, None
+        else:
+            print("❌ Geräteabfrage fehlgeschlagen:", daten.get("result_msg"))
+            print("Antwort:", antwort.text)
+            return None, None
+    except Exception as fehler:
+        print("❌ Fehler bei Geräteabfrage:", str(fehler))
+        return None, None
+
+
 def hole_isolarcloud_daten(app_key: str, secret_key: str, user_account: str, user_password: str):
     """
-    Holt Echtdaten von iSolarCloud.
+    Holt Echtdaten von iSolarCloud über V1 Gerätendpunkt.
     Gibt ein Dict mit Messwerten zurück, oder None bei Fehler.
     """
     token = isolarcloud_login(app_key, secret_key, user_account, user_password)
@@ -189,49 +262,63 @@ def hole_isolarcloud_daten(app_key: str, secret_key: str, user_account: str, use
     if not ps_id:
         return None
 
-    url = f"{ISOLARCLOUD_API_URL}/openapi/platform/getPowerStationRealTimeData"
+    ps_key, device_type = isolarcloud_get_device_info(app_key, secret_key, token, ps_id)
+    if not ps_key:
+        return None
+
+    url = f"{ISOLARCLOUD_API_URL}/openapi/getDeviceRealTimeData"
     headers = {
         "Content-Type": "application/json;charset=UTF-8",
         "x-access-key": secret_key,
-        "Authorization": f"Bearer {token}",
+        "sys_code": "901",
     }
     body = {
         "appkey": app_key,
-        "ps_id_list": [ps_id],
+        "token": token,
+        "ps_key_list": [ps_key],
+        "device_type": device_type,
         "point_id_list": [
             MESSPUNKT_BATTERIE_SOC,
-            MESSPUNKT_PV_LEISTUNG,
             MESSPUNKT_HAUSVERBRAUCH,
-            MESSPUNKT_NETZ,
+            MESSPUNKT_NETZBEZUG,
+            MESSPUNKT_EINSPEISUNG,
+            MESSPUNKT_BAT_LADEN,
+            MESSPUNKT_BAT_ENTLADEN,
         ],
     }
     try:
         antwort = requests.post(url, json=body, headers=headers, timeout=15)
         daten = antwort.json()
+        print("iSolarCloud Antwort:", antwort.text[:500])
+
         if daten.get("result_code") == "1":
-            punkte = daten["result_data"]["device_point_list"][0]
+            eintrag = daten["result_data"]["device_point_list"][0]["device_point"]
 
-            batterie = int(round(float(punkte.get(f"p{MESSPUNKT_BATTERIE_SOC}") or 0)))
-            pv = int(round(float(punkte.get(f"p{MESSPUNKT_PV_LEISTUNG}") or 0)))
-            haus = int(round(float(punkte.get(f"p{MESSPUNKT_HAUSVERBRAUCH}") or 0)))
-            netz_roh = float(punkte.get(f"p{MESSPUNKT_NETZ}") or 0)
+            batterie = int(round(float(eintrag.get(f"p{MESSPUNKT_BATTERIE_SOC}") or 0)))
+            haus = int(round(float(eintrag.get(f"p{MESSPUNKT_HAUSVERBRAUCH}") or 0)))
+            netz_import = int(round(float(eintrag.get(f"p{MESSPUNKT_NETZBEZUG}") or 0)))
+            feed_in = int(round(float(eintrag.get(f"p{MESSPUNKT_EINSPEISUNG}") or 0)))
+            bat_laden = int(round(float(eintrag.get(f"p{MESSPUNKT_BAT_LADEN}") or 0)))
+            bat_entladen = int(round(float(eintrag.get(f"p{MESSPUNKT_BAT_ENTLADEN}") or 0)))
 
-            netzbezug = int(round(max(0.0, netz_roh)))
-            ueberschuss = int(round(max(0.0, pv - haus)))
+            pv = max(0, haus + feed_in + bat_laden - netz_import - bat_entladen)
+            ueberschuss = max(0, feed_in + bat_laden - netz_import - bat_entladen)
 
-            print(f"✅ iSolarCloud Echtdaten empfangen:")
+            print("✅ iSolarCloud Echtdaten empfangen:")
             print(f"   Batterie: {batterie}%")
-            print(f"   PV-Leistung: {pv} W")
+            print(f"   PV-Leistung (berechnet): {pv} W")
             print(f"   Hausverbrauch: {haus} W")
-            print(f"   Netzleistung (roh): {netz_roh} W")
-            print(f"   Netzbezug: {netzbezug} W")
-            print(f"   Überschuss: {ueberschuss} W")
+            print(f"   Netzbezug: {netz_import} W")
+            print(f"   Einspeisung: {feed_in} W")
+            print(f"   Batterie laden: {bat_laden} W")
+            print(f"   Batterie entladen: {bat_entladen} W")
+            print(f"   Überschuss (berechnet): {ueberschuss} W")
 
             return {
                 "batterie_prozent": batterie,
                 "pv_leistung_w": pv,
                 "hausverbrauch_w": haus,
-                "netzbezug_w": netzbezug,
+                "netzbezug_w": netz_import,
                 "ueberschuss_w": ueberschuss,
             }
         else:
