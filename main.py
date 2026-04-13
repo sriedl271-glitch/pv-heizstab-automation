@@ -294,7 +294,7 @@ def hole_isolarcloud_daten(app_key: str, secret_key: str, user_account: str, use
         if daten.get("result_code") == "1":
             eintrag = daten["result_data"]["device_point_list"][0]["device_point"]
 
-            batterie = int(round(float(eintrag.get(f"p{MESSPUNKT_BATTERIE_SOC}") or 0)))
+            batterie = int(round(float(eintrag.get(f"p{MESSPUNKT_BATTERIE_SOC}") or 0) * 100))
             haus = int(round(float(eintrag.get(f"p{MESSPUNKT_HAUSVERBRAUCH}") or 0)))
             netz_import = int(round(float(eintrag.get(f"p{MESSPUNKT_NETZBEZUG}") or 0)))
             feed_in = int(round(float(eintrag.get(f"p{MESSPUNKT_EINSPEISUNG}") or 0)))
