@@ -1,155 +1,237 @@
 """
-TYDOM Discovery Script - Version 3
-Testet verschiedene Authentifizierungs-Varianten fuer die TYDOM API.
+TYDOM Discovery Script - Version 4
+Analysiert zuerst was der TYDOM-Server wirklich verlangt,
+dann versucht die passende Authentifizierung.
 """
 import asyncio
 import base64
 import hashlib
-import hmac
 import json
 import os
 import ssl
-
+import requests
 import websockets
 
+
 TYDOM_MAC = "001A25067773"
-TYDOM_MAC_LOWER = "001a25067773"
-TYDOM_URL_UPPER = f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
-TYDOM_URL_LOWER = f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC_LOWER}&appli=1"
+
+# Verschiedene URL-Varianten zum Testen
+URLS = [
+    f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1",
+    f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=2",
+    f"wss://medi.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1",
+    f"wss://tydom.deltadore.fr/mediation/client?mac={TYDOM_MAC}&appli=1",
+]
 
 
-def mache_basic_auth(benutzername: str, passwort: str) -> str:
-    credentials = base64.b64encode(f"{benutzername}:{passwort}".encode("utf-8")).decode("utf-8")
-    return f"Basic {credentials}"
+def md5(text: str) -> str:
+    return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
-def erstelle_http_anfrage(methode: str, pfad: str, body: str = "") -> str:
+def basic_auth(user: str, passwort: str) -> str:
+    return "Basic " + base64.b64encode(f"{user}:{passwort}".encode()).decode()
+
+
+def berechne_digest_antwort(user, passwort, realm, nonce, methode, uri):
+    ha1 = md5(f"{user}:{realm}:{passwort}")
+    ha2 = md5(f"{methode}:{uri}")
+    return md5(f"{ha1}:{nonce}:{ha2}")
+
+
+def erstelle_http_anfrage(methode, pfad, body=""):
     laenge = len(body.encode("utf-8")) if body else 0
     return (
         f"{methode} {pfad} HTTP/1.1\r\n"
         f"Content-Length: {laenge}\r\n"
         f"Content-Type: application/json; charset=UTF-8\r\n"
         f"Transac-Id: 0\r\n"
-        f"\r\n"
-        f"{body}"
+        f"\r\n{body}"
     )
 
 
-async def verbinde(url: str, headers: dict, beschreibung: str) -> bool:
-    print(f"\n{'='*55}")
-    print(f"Versuch: {beschreibung}")
-    print(f"URL:     {url}")
-    print(f"{'='*55}")
+def schritt1_https_probe(email, passwort):
+    """
+    Testet via HTTPS was der Server als Authentifizierung erwartet.
+    """
+    print("\n" + "="*60)
+    print("SCHRITT 1: HTTPS-Probe (Auth-Typ ermitteln)")
+    print("="*60)
 
-    try:
-        async with websockets.connect(
-            url,
-            additional_headers=headers,
-            open_timeout=15,
-            ping_interval=None,
-        ) as ws:
-            print(">>> VERBINDUNG ERFOLGREICH! <<<")
+    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
 
-            # Initiale Nachrichten lesen
-            try:
-                for _ in range(3):
-                    msg = await asyncio.wait_for(ws.recv(), timeout=4)
-                    text = msg if isinstance(msg, str) else msg.decode("utf-8")
-                    print(f"Init-Msg ({len(text)} Bytes): {text[:200]}")
-            except asyncio.TimeoutError:
-                pass
+    test_urls = [
+        "https://mediation.tydom.com/",
+        "https://mediation.tydom.com/mediation/",
+        "https://medi.tydom.com/",
+    ]
 
-            # Geraete-Konfiguration abfragen
-            print("\n--- GET /configs/file ---")
-            await ws.send(erstelle_http_anfrage("GET", "/configs/file"))
-            antwort = ""
-            try:
-                for _ in range(8):
-                    chunk = await asyncio.wait_for(ws.recv(), timeout=8)
-                    antwort += chunk if isinstance(chunk, str) else chunk.decode("utf-8")
-                    if len(antwort) > 100:
-                        break
-            except asyncio.TimeoutError:
-                pass
+    for url in test_urls:
+        try:
+            r = requests.get(url, timeout=10, verify=False,
+                           headers={"User-Agent": "TydomApp/4.17.41"})
+            print(f"\n{url}")
+            print(f"  Status: {r.status_code}")
+            print(f"  Headers: {dict(r.headers)}")
+            if r.text:
+                print(f"  Body: {r.text[:200]}")
+        except requests.exceptions.SSLError as e:
+            print(f"\n{url} -> SSL-Fehler: {e}")
+        except requests.exceptions.ConnectionError as e:
+            print(f"\n{url} -> Verbindungsfehler: {e}")
+        except Exception as e:
+            print(f"\n{url} -> {type(e).__name__}: {e}")
 
-            if "\r\n\r\n" in antwort:
-                _, body = antwort.split("\r\n\r\n", 1)
-                if body.strip():
-                    try:
+    # Mit Basic Auth probieren (HTTP-Ebene)
+    print("\n--- HTTPS mit Basic Auth (MD5) ---")
+    for url in ["https://mediation.tydom.com/mediation/",
+                "https://medi.tydom.com/mediation/"]:
+        try:
+            pw_md5 = md5(passwort)
+            r = requests.get(
+                url, timeout=10, verify=False,
+                headers={
+                    "Authorization": basic_auth(email, pw_md5),
+                    "x-ssl-client-dn": f"emailAddress={email}",
+                    "User-Agent": "TydomApp/4.17.41",
+                }
+            )
+            print(f"{url}")
+            print(f"  Status: {r.status_code}")
+            www_auth = r.headers.get("WWW-Authenticate", "")
+            if www_auth:
+                print(f"  WWW-Authenticate: {www_auth}")
+        except Exception as e:
+            print(f"{url} -> {type(e).__name__}: {e}")
+
+
+async def schritt2_websocket_versuche(email, passwort):
+    """
+    Versucht verschiedene WebSocket-Authentifizierungen.
+    """
+    print("\n" + "="*60)
+    print("SCHRITT 2: WebSocket-Versuche")
+    print("="*60)
+
+    pw_varianten = {
+        "plain":      passwort,
+        "md5":        md5(passwort),
+        "md5_upper":  md5(passwort).upper(),
+        "sha256":     hashlib.sha256(passwort.encode()).hexdigest(),
+        "md5_md5":    md5(md5(passwort)),
+        "md5_email":  md5(f"{email}:{passwort}"),
+    }
+
+    ssl_noverify = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ssl_noverify.check_hostname = False
+    ssl_noverify.verify_mode = ssl.CERT_NONE
+
+    versuche = []
+    for url in URLS[:2]:  # Nur die 2 wichtigsten URLs
+        for pw_name, pw_wert in pw_varianten.items():
+            versuche.append({
+                "url": url,
+                "headers": {
+                    "Authorization": basic_auth(email, pw_wert),
+                    "x-ssl-client-dn": f"emailAddress={email}",
+                },
+                "name": f"URL={url.split('?')[0][-30:]} | PW={pw_name}",
+            })
+
+    for v in versuche:
+        print(f"\nVersuch: {v['name']}")
+        try:
+            async with websockets.connect(
+                v["url"],
+                additional_headers=v["headers"],
+                open_timeout=10,
+                ping_interval=None,
+            ) as ws:
+                print("  >>> VERBINDUNG ERFOLGREICH! <<<")
+                # Geraete lesen
+                await ws.send(erstelle_http_anfrage("GET", "/devices/data"))
+                try:
+                    antwort = await asyncio.wait_for(ws.recv(), timeout=8)
+                    text = antwort if isinstance(antwort, str) else antwort.decode()
+                    if "\r\n\r\n" in text:
+                        body = text.split("\r\n\r\n", 1)[1]
                         daten = json.loads(body)
-                        print("CONFIGS/FILE:")
-                        print(json.dumps(daten, indent=2, ensure_ascii=False)[:4000])
-                    except Exception:
-                        print(f"Body (roh): {body[:500]}")
+                        print(f"  GERAETE: {json.dumps(daten, ensure_ascii=False)[:500]}")
+                except Exception as e:
+                    print(f"  Lese-Fehler: {e}")
+                return True
+        except Exception as e:
+            fehler = str(e)
+            if "401" in fehler:
+                print(f"  -> 401 (Zugangsdaten)")
+            elif "400" in fehler:
+                print(f"  -> 400 (Format)")
+            elif "403" in fehler:
+                print(f"  -> 403 (Verboten)")
+            elif "404" in fehler:
+                print(f"  -> 404 (URL nicht gefunden)")
+            elif "timeout" in fehler.lower() or "TimeoutError" in type(e).__name__:
+                print(f"  -> Timeout")
             else:
-                print(f"Antwort: {antwort[:400]}")
+                print(f"  -> {type(e).__name__}: {fehler[:100]}")
+        await asyncio.sleep(0.5)
 
-            # Geraete-Daten
-            print("\n--- GET /devices/data ---")
-            await ws.send(erstelle_http_anfrage("GET", "/devices/data"))
-            antwort2 = ""
-            try:
-                for _ in range(8):
-                    chunk = await asyncio.wait_for(ws.recv(), timeout=8)
-                    antwort2 += chunk if isinstance(chunk, str) else chunk.decode("utf-8")
-                    if len(antwort2) > 100:
-                        break
-            except asyncio.TimeoutError:
-                pass
+    return False
 
-            if "\r\n\r\n" in antwort2:
-                _, body2 = antwort2.split("\r\n\r\n", 1)
-                if body2.strip():
-                    try:
-                        daten2 = json.loads(body2)
-                        print("DEVICES/DATA:")
-                        print(json.dumps(daten2, indent=2, ensure_ascii=False)[:4000])
-                        if isinstance(daten2, list):
-                            print("\n--- GERAETE-IDs ---")
-                            for g in daten2:
-                                print(f"Name: '{g.get('name')}' | ID: {g.get('id')}")
-                                for ep in g.get("endpoints", []):
-                                    print(f"  EP-ID: {ep.get('id')} | Name: {ep.get('name')} | Typen: {[s.get('name') for s in ep.get('cstatus', [])]}")
-                    except Exception:
-                        print(f"Body (roh): {body2[:500]}")
 
-            # Szenarien
-            print("\n--- GET /scenarios/file ---")
-            await ws.send(erstelle_http_anfrage("GET", "/scenarios/file"))
-            antwort3 = ""
-            try:
-                for _ in range(5):
-                    chunk = await asyncio.wait_for(ws.recv(), timeout=8)
-                    antwort3 += chunk if isinstance(chunk, str) else chunk.decode("utf-8")
-                    if len(antwort3) > 100:
-                        break
-            except asyncio.TimeoutError:
-                pass
-            if "\r\n\r\n" in antwort3:
-                _, body3 = antwort3.split("\r\n\r\n", 1)
-                if body3.strip():
-                    try:
-                        daten3 = json.loads(body3)
-                        print("SZENARIEN:")
-                        print(json.dumps(daten3, indent=2, ensure_ascii=False)[:3000])
-                    except Exception:
-                        print(f"Body (roh): {body3[:400]}")
+async def schritt3_weitere_urls(email, passwort):
+    """
+    Testet weitere mögliche API-Endpunkte.
+    """
+    print("\n" + "="*60)
+    print("SCHRITT 3: Weitere URL-Varianten")
+    print("="*60)
 
-            return True
+    pw_md5 = md5(passwort)
+    headers = {
+        "Authorization": basic_auth(email, pw_md5),
+        "x-ssl-client-dn": f"emailAddress={email}",
+    }
 
-    except Exception as e:
-        fehler = str(e)
-        if "401" in fehler:
-            print(f"FEHLER: HTTP 401 (Zugangsdaten falsch)")
-        elif "400" in fehler:
-            print(f"FEHLER: HTTP 400 (Anfrage-Format)")
-        elif "403" in fehler:
-            print(f"FEHLER: HTTP 403 (Zugriff verweigert)")
-        elif "TimeoutError" in type(e).__name__ or "timeout" in fehler.lower():
-            print(f"FEHLER: Timeout (kein Heimnetz-Zugriff von GitHub)")
-        else:
-            print(f"FEHLER: {type(e).__name__}: {fehler}")
-        return False
+    weitere_urls = [
+        f"wss://medi.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1",
+        f"wss://tydom.deltadore.fr/mediation/client?mac={TYDOM_MAC}&appli=1",
+        f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC.lower()}&appli=1",
+        f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=3",
+    ]
+
+    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ssl_ctx.check_hostname = False
+    ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    for url in weitere_urls:
+        print(f"\n{url}")
+        try:
+            async with websockets.connect(
+                url,
+                additional_headers=headers,
+                open_timeout=10,
+                ping_interval=None,
+                ssl=ssl_ctx,
+            ) as ws:
+                print("  >>> VERBUNDEN! <<<")
+                return url
+        except Exception as e:
+            fehler = str(e)
+            if "401" in fehler:
+                print(f"  -> 401 (Server erreichbar, aber Auth falsch)")
+            elif "400" in fehler:
+                print(f"  -> 400")
+            elif "404" in fehler:
+                print(f"  -> 404 (URL existiert nicht)")
+            elif any(x in fehler for x in ["getaddrinfo", "Name or service", "nodename"]):
+                print(f"  -> DNS-Fehler (Domain existiert nicht)")
+            elif "timeout" in fehler.lower():
+                print(f"  -> Timeout")
+            else:
+                print(f"  -> {type(e).__name__}: {fehler[:80]}")
+    return None
 
 
 async def main():
@@ -160,85 +242,25 @@ async def main():
         print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print(f"TYDOM Discovery v3")
+    print(f"TYDOM Discovery v4")
     print(f"MAC:   {TYDOM_MAC}")
     print(f"Email: {email[:4]}***")
 
-    # Passwort-Varianten berechnen
-    pw_plain     = passwort
-    pw_md5       = hashlib.md5(passwort.encode("utf-8")).hexdigest()
-    pw_md5_upper = pw_md5.upper()
-    pw_sha256    = hashlib.sha256(passwort.encode("utf-8")).hexdigest()
-    pw_sha1      = hashlib.sha1(passwort.encode("utf-8")).hexdigest()
+    # HTTPS-Probe
+    schritt1_https_probe(email, passwort)
 
-    print(f"\nPasswort-Varianten:")
-    print(f"  plain:     {pw_plain[:3]}***")
-    print(f"  md5:       {pw_md5[:8]}...")
-    print(f"  md5_upper: {pw_md5_upper[:8]}...")
-    print(f"  sha256:    {pw_sha256[:8]}...")
-    print(f"  sha1:      {pw_sha1[:8]}...")
+    # WebSocket-Versuche
+    ok = await schritt2_websocket_versuche(email, passwort)
 
-    ssl_default = True
-    ssl_noverify = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ssl_noverify.check_hostname = False
-    ssl_noverify.verify_mode = ssl.CERT_NONE
+    if not ok:
+        await schritt3_weitere_urls(email, passwort)
 
-    versuche = [
-        # (url, headers, beschreibung)
-        (
-            TYDOM_URL_UPPER,
-            {"Authorization": mache_basic_auth(email, pw_md5),
-             "x-ssl-client-dn": f"emailAddress={email}"},
-            "1: MD5-Passwort + x-ssl-client-dn (MAC gross)"
-        ),
-        (
-            TYDOM_URL_UPPER,
-            {"Authorization": mache_basic_auth(email, pw_plain),
-             "x-ssl-client-dn": f"emailAddress={email}"},
-            "2: Klartext-Passwort + x-ssl-client-dn (MAC gross)"
-        ),
-        (
-            TYDOM_URL_UPPER,
-            {"Authorization": mache_basic_auth(email, pw_sha256),
-             "x-ssl-client-dn": f"emailAddress={email}"},
-            "3: SHA256-Passwort + x-ssl-client-dn (MAC gross)"
-        ),
-        (
-            TYDOM_URL_UPPER,
-            {"Authorization": mache_basic_auth(email, pw_sha1),
-             "x-ssl-client-dn": f"emailAddress={email}"},
-            "4: SHA1-Passwort + x-ssl-client-dn (MAC gross)"
-        ),
-        (
-            TYDOM_URL_LOWER,
-            {"Authorization": mache_basic_auth(email, pw_md5),
-             "x-ssl-client-dn": f"emailAddress={email}"},
-            "5: MD5-Passwort + x-ssl-client-dn (MAC klein)"
-        ),
-        (
-            TYDOM_URL_UPPER,
-            {"Authorization": mache_basic_auth(email, pw_md5_upper)},
-            "6: MD5-Passwort GROSSBUCHSTABEN, kein x-ssl-header"
-        ),
-        (
-            TYDOM_URL_UPPER,
-            {"Authorization": mache_basic_auth(email, pw_plain)},
-            "7: Klartext-Passwort, kein x-ssl-header"
-        ),
-    ]
-
-    for url, headers, beschreibung in versuche:
-        ok = await verbinde(url, headers, beschreibung)
-        if ok:
-            print(f"\n>>> ERFOLG mit Versuch: {beschreibung} <<<")
-            return
-        await asyncio.sleep(1)
-
-    print("\n=== Alle Versuche fehlgeschlagen ===")
-    print("Moegliche Ursachen:")
-    print("1. Delta Dore verwendet einen eigenen Authentifizierungsserver (OAuth2)")
-    print("2. Das TYDOM Home hat ein separates API-Passwort")
-    print("3. Die Mediation-URL ist fuer dieses Geraet anders")
+    if not ok:
+        print("\n" + "="*60)
+        print("ZUSAMMENFASSUNG: Alle Versuche fehlgeschlagen")
+        print("Naechster Schritt: Netzwerk-Mitschnitt der TYDOM-App")
+        print("um die exakten Authentifizierungsdaten zu ermitteln.")
+        print("="*60)
 
 
 if __name__ == "__main__":
