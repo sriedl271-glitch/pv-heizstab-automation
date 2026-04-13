@@ -1,0 +1,46 @@
+name: PV Heizstab Monitor
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/5 * * * *"
+
+permissions:
+  contents: write
+
+jobs:
+  run-monitor:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: requests installieren
+        run: pip install requests
+
+      - name: Script ausführen
+        env:
+          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+          ISOLARCLOUD_APP_KEY: ${{ secrets.ISOLARCLOUD_APP_KEY }}
+          SOLARCLOUD_SECRET_KEY: ${{ secrets.SOLARCLOUD_SECRET_KEY }}
+          ISOLARCLOUD_USER_ACCOUNT: ${{ secrets.ISOLARCLOUD_USER_ACCOUNT }}
+          ISOLARCLOUD_USER_PASSWORD: ${{ secrets.ISOLARCLOUD_USER_PASSWORD }}
+        run: python main.py
+
+      - name: Git konfigurieren
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: status.json speichern
+        run: |
+          git add status.json
+          git diff --cached --quiet || git commit -m "Statusdatei automatisch aktualisiert"
+          git push
