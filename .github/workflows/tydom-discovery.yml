@@ -17,7 +17,7 @@ jobs:
           python-version: "3.11"
 
       - name: Pakete installieren
-        run: pip install websockets
+        run: pip install websockets requests
 
       - name: TYDOM Discovery ausfuehren
         env:
