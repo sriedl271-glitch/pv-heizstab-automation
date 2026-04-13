@@ -1,0 +1,26 @@
+name: TYDOM Discovery Test
+
+on:
+  workflow_dispatch:
+
+jobs:
+  tydom-discovery:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Pakete installieren
+        run: pip install websockets
+
+      - name: TYDOM Discovery ausfuehren
+        env:
+          TYDOM_EMAIL: ${{ secrets.TYDOM_EMAIL }}
+          TYDOM_PASSWORD: ${{ secrets.TYDOM_PASSWORD }}
+        run: python tydom_discovery.py
