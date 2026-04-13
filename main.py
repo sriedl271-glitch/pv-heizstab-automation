@@ -1,5 +1,7 @@
 import json
 import os
+import smtplib
+from email.mime.text import MIMEText
 from datetime import datetime
 
 import requests
@@ -84,13 +86,29 @@ def sende_pushover(titel: str, nachricht: str, prioritaet: int = 0) -> None:
 
 def sende_email(betreff: str, inhalt: str) -> None:
     """
-    Platzhalter für späteren E-Mail-Versand.
+    Sendet eine E-Mail über Gmail SMTP.
+    Absender und Empfänger: sriedl271@gmail.com
     """
-    print("📧 E-MAIL TEST")
-    print(f"BETREFF: {betreff}")
-    print("INHALT:")
-    print(inhalt)
-    print("-" * 60)
+    gmail_passwort = os.environ.get("GMAIL_APP_PASSWORD")
+    gmail_adresse = "sriedl271@gmail.com"
+
+    if not gmail_passwort:
+        print("❌ GMAIL_APP_PASSWORD fehlt – E-Mail wird nicht gesendet.")
+        return
+
+    nachricht = MIMEText(inhalt, "plain", "utf-8")
+    nachricht["Subject"] = betreff
+    nachricht["From"] = gmail_adresse
+    nachricht["To"] = gmail_adresse
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(gmail_adresse, gmail_passwort)
+            server.sendmail(gmail_adresse, gmail_adresse, nachricht.as_string())
+        print("✅ E-Mail erfolgreich gesendet.")
+    except Exception as fehler:
+        print("❌ Fehler beim E-Mail-Versand:", str(fehler))
 
 
 def hole_testdaten() -> dict:
@@ -452,6 +470,11 @@ def main() -> None:
             titel=ergebnis["titel"],
             nachricht=nachricht_gesamt,
             prioritaet=ergebnis["prioritaet"],
+        )
+
+        sende_email(
+            betreff=ergebnis["titel"],
+            inhalt=nachricht_gesamt,
         )
 
         speichere_status(
