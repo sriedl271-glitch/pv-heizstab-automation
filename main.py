@@ -193,10 +193,10 @@ def hole_isolarcloud_daten(app_key: str, secret_key: str, user_account: str, use
     headers = {
         "Content-Type": "application/json;charset=UTF-8",
         "x-access-key": secret_key,
+        "Authorization": f"Bearer {token}",
     }
     body = {
         "appkey": app_key,
-        "Authorization": f"Bearer {token}",
         "ps_id_list": [ps_id],
         "point_id_list": [
             MESSPUNKT_BATTERIE_SOC,
