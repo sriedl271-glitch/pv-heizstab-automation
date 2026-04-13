@@ -1,14 +1,7 @@
 """
-TYDOM Discovery Script - Version 10
-Korrekte Initialisierungsreihenfolge nach hass-deltadore-tydom-component:
-1. GET /ping
-2. GET /info
-3. GET /groups/file
-4. POST /refresh/all  <-- wichtig! erst danach kommen Geraete-Daten
-5. GET /devices/data
-6. GET /scenarios/file
-
-Transac-Id = Unix-Zeitstempel in Millisekunden (nicht 0!)
+TYDOM Discovery Script - Version 11
+Strategie: Alle Init-Befehle schnell senden, dann 30 Sek alles abhoren.
+TYDOM schickt Antworten asynchron - nicht auf einzelne Antworten warten.
 """
 import asyncio
 import hashlib
@@ -51,7 +44,6 @@ def md5(text):
 
 
 def transac_id():
-    """Unix-Zeitstempel in Millisekunden als Transac-Id."""
     return str(time.time_ns() // 1_000_000)
 
 
@@ -140,8 +132,7 @@ def digest_challenge():
     return None
 
 
-def http_anfrage(methode, pfad, body=""):
-    """HTTP-over-WebSocket Anfrage mit korrekter Transac-Id."""
+def http_msg(methode, pfad, body=""):
     laenge = len(body.encode("utf-8")) if body else 0
     return (
         f"{methode} {pfad} HTTP/1.1\r\n"
@@ -150,31 +141,6 @@ def http_anfrage(methode, pfad, body=""):
         f"Transac-Id: {transac_id()}\r\n"
         f"\r\n{body}"
     )
-
-
-async def lese_antworten(ws, anzahl=3, timeout=8, label=""):
-    """Liest bis zu 'anzahl' Nachrichten oder bis Timeout."""
-    nachrichten = []
-    for i in range(anzahl):
-        try:
-            raw = await asyncio.wait_for(ws.recv(), timeout=timeout)
-            text = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
-            nachrichten.append(text)
-            if "\r\n\r\n" in text:
-                erste_zeile = text.split("\r\n")[0]
-                body = text.split("\r\n\r\n", 1)[1].strip()
-                print(f"  [{label}] <- {erste_zeile}")
-                if body and len(body) > 2:
-                    try:
-                        daten = json.loads(body)
-                        return daten
-                    except json.JSONDecodeError:
-                        print(f"  [{label}] body (kein JSON): {body[:100]}")
-            else:
-                print(f"  [{label}] <- (keine HTTP-Struktur): {text[:80]}")
-        except (asyncio.TimeoutError, asyncio.CancelledError):
-            break
-    return None
 
 
 async def tydom_erkunden(gw_pw, challenge):
@@ -191,85 +157,73 @@ async def tydom_erkunden(gw_pw, challenge):
     ) as ws:
         print("Verbunden!\n")
 
-        # ── Initialisierungssequenz ───────────────────────────────────────
-        print("=== INITIALISIERUNG ===")
+        # ── Schritt 1: Alle Befehle schnell hintereinander senden ────────
+        befehle = [
+            ("GET",  "/ping"),
+            ("GET",  "/info"),
+            ("GET",  "/groups/file"),
+            ("POST", "/refresh/all"),
+            ("GET",  "/configs/file"),
+            ("GET",  "/devices/meta"),
+            ("GET",  "/devices/data"),
+            ("GET",  "/scenarios/file"),
+        ]
 
-        # 1. Ping
-        print("\n1) GET /ping")
-        await ws.send(http_anfrage("GET", "/ping"))
-        await lese_antworten(ws, anzahl=2, timeout=5, label="ping")
+        print("Sende alle Befehle:")
+        for methode, pfad in befehle:
+            print(f"  -> {methode} {pfad}")
+            await ws.send(http_msg(methode, pfad))
+            await asyncio.sleep(0.1)
 
-        # 2. Info
-        print("\n2) GET /info")
-        await ws.send(http_anfrage("GET", "/info"))
-        info = await lese_antworten(ws, anzahl=2, timeout=5, label="info")
-        if info:
-            print(f"   Info: {json.dumps(info, ensure_ascii=False)[:200]}")
+        # ── Schritt 2: 30 Sekunden lang alles roh abhoren ────────────────
+        print("\nHore 30 Sekunden ab...\n")
+        nachricht_nr = 0
+        start = time.time()
 
-        # 3. Groups
-        print("\n3) GET /groups/file")
-        await ws.send(http_anfrage("GET", "/groups/file"))
-        await lese_antworten(ws, anzahl=2, timeout=5, label="groups")
+        while time.time() - start < 30:
+            try:
+                raw = await asyncio.wait_for(ws.recv(), timeout=3)
+                nachricht_nr += 1
+                text = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
 
-        # 4. Refresh ALL (wichtig – triggert Geraete-Daten!)
-        print("\n4) POST /refresh/all")
-        await ws.send(http_anfrage("POST", "/refresh/all"))
-        await lese_antworten(ws, anzahl=2, timeout=8, label="refresh")
+                print(f"--- Nachricht #{nachricht_nr} ({len(text)} Bytes) ---")
 
-        # 5. Configs
-        print("\n5) GET /configs/file")
-        await ws.send(http_anfrage("GET", "/configs/file"))
-        await lese_antworten(ws, anzahl=2, timeout=5, label="configs")
+                if "\r\n\r\n" in text:
+                    teile = text.split("\r\n\r\n", 1)
+                    header_block = teile[0]
+                    body = teile[1].strip() if len(teile) > 1 else ""
 
-        # ── Geraete lesen ─────────────────────────────────────────────────
-        print("\n=== GERAETE ===")
+                    # Erste Header-Zeile (z.B. "HTTP/1.1 200 OK" oder "PUT /devices/data ...")
+                    erste_zeile = header_block.split("\r\n")[0]
+                    print(f"  Erste Zeile: {erste_zeile}")
 
-        # 6. Devices Meta
-        print("\n6) GET /devices/meta")
-        await ws.send(http_anfrage("GET", "/devices/meta"))
-        await lese_antworten(ws, anzahl=2, timeout=5, label="meta")
+                    # Alle Header
+                    for h in header_block.split("\r\n")[1:]:
+                        if h.strip():
+                            print(f"  Header: {h}")
 
-        # 7. Devices Data
-        print("\n7) GET /devices/data")
-        await ws.send(http_anfrage("GET", "/devices/data"))
-        geraete = await lese_antworten(ws, anzahl=5, timeout=10, label="devices")
+                    # Body
+                    if body:
+                        print(f"  Body ({len(body)} Bytes):")
+                        try:
+                            daten = json.loads(body)
+                            # Schoen formatiert ausgeben
+                            print(json.dumps(daten, indent=2, ensure_ascii=False)[:1000])
+                        except json.JSONDecodeError:
+                            print(f"  {body[:300]}")
+                    else:
+                        print("  (kein Body)")
+                else:
+                    # Kein HTTP-Format - roh ausgeben
+                    print(f"  RAW: {repr(text[:200])}")
 
-        if geraete:
-            print("\n  GERAETE-LISTE:")
-            geraete_liste = geraete if isinstance(geraete, list) else [geraete]
-            for g in geraete_liste:
-                gid   = g.get("id", "?")
-                gname = g.get("name", "?")
-                gtype = g.get("type", "?")
-                print(f"\n  Geraet: '{gname}'  id={gid}  type={gtype}")
-                for ep in g.get("endpoints", []):
-                    eid   = ep.get("id", "?")
-                    etype = ep.get("type", "?")
-                    print(f"    Endpunkt: id={eid}  type={etype}")
-                    for dp in ep.get("cdata", []):
-                        name  = dp.get("name", "?")
-                        value = dp.get("value", "?")
-                        dtype = dp.get("type", "?")
-                        print(f"      {name} = {value}  [{dtype}]")
-        else:
-            print("  Keine Geraete-Daten empfangen.")
+                print()
 
-        # ── Szenen lesen ──────────────────────────────────────────────────
-        print("\n=== SZENEN ===")
-        print("\n8) GET /scenarios/file")
-        await ws.send(http_anfrage("GET", "/scenarios/file"))
-        szenen = await lese_antworten(ws, anzahl=5, timeout=10, label="scenarios")
+            except (asyncio.TimeoutError, asyncio.CancelledError):
+                verbleibend = int(30 - (time.time() - start))
+                print(f"  (warte... noch {verbleibend} Sek.)")
 
-        if szenen:
-            szenen_liste = szenen if isinstance(szenen, list) else [szenen]
-            for s in szenen_liste:
-                sid   = s.get("id", "?")
-                sname = s.get("name", "?")
-                print(f"  Szene: '{sname}'  id={sid}")
-        else:
-            print("  Keine Szenen empfangen.")
-
-        print("\nFertig.")
+        print(f"\nFertig. {nachricht_nr} Nachrichten empfangen.")
 
 
 async def main():
@@ -279,7 +233,7 @@ async def main():
         print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print("TYDOM Discovery v10 – Korrekte Initialisierung")
+    print("TYDOM Discovery v11 – Alle Befehle + 30 Sek. abhoren")
     print(f"MAC: {TYDOM_MAC}\n")
 
     print("OAuth2-Token...")
