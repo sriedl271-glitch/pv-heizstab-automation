@@ -1,7 +1,8 @@
 """
-TYDOM Discovery Script - Version 11
-Strategie: Alle Init-Befehle schnell senden, dann 30 Sek alles abhoren.
-TYDOM schickt Antworten asynchron - nicht auf einzelne Antworten warten.
+TYDOM Discovery Script - Version 12
+Entscheidender Fix: Remote-Modus erfordert Praefix-Byte 0x02 vor jeder Nachricht!
+Quelle: hass-deltadore-tydom-component, TydomClient._cmd_prefix = b"\x02" (remote)
+Nachrichten werden als BYTES gesendet, nicht als Text.
 """
 import asyncio
 import hashlib
@@ -20,7 +21,10 @@ TYDOM_MAC   = "001A25067773"
 TYDOM_WSS   = f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
 TYDOM_HTTPS = f"https://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
 
-DELTADORE_AUTH_URL  = (
+# Remote-Modus: jede Nachricht beginnt mit diesem Byte
+CMD_PREFIX = b"\x02"
+
+DELTADORE_AUTH_URL = (
     "https://deltadoreadb2ciot.b2clogin.com"
     "/deltadoreadb2ciot.onmicrosoft.com"
     "/v2.0/.well-known/openid-configuration"
@@ -132,15 +136,29 @@ def digest_challenge():
     return None
 
 
-def http_msg(methode, pfad, body=""):
+def http_bytes(methode, pfad, body=""):
+    """Erstellt eine HTTP-over-WebSocket Nachricht als Bytes mit 0x02 Praefix."""
     laenge = len(body.encode("utf-8")) if body else 0
-    return (
+    nachricht = (
         f"{methode} {pfad} HTTP/1.1\r\n"
         f"Content-Length: {laenge}\r\n"
         f"Content-Type: application/json; charset=UTF-8\r\n"
         f"Transac-Id: {transac_id()}\r\n"
         f"\r\n{body}"
     )
+    return CMD_PREFIX + nachricht.encode("ascii")
+
+
+def parse_antwort(raw):
+    """Parst eine eingehende TYDOM-Nachricht (mit moeglichem 0x02 Praefix)."""
+    if isinstance(raw, bytes):
+        # 0x02 Praefix entfernen falls vorhanden
+        if raw and raw[0] == 0x02:
+            raw = raw[1:]
+        text = raw.decode("utf-8", errors="replace")
+    else:
+        text = raw
+    return text
 
 
 async def tydom_erkunden(gw_pw, challenge):
@@ -153,11 +171,11 @@ async def tydom_erkunden(gw_pw, challenge):
     async with websockets.connect(
         TYDOM_WSS,
         additional_headers={"Authorization": auth, "User-Agent": "TydomApp/4.17.41"},
-        ssl=ssl_ctx, open_timeout=15, ping_interval=None,
+        ssl=ssl_ctx, open_timeout=15, ping_interval=2,
     ) as ws:
         print("Verbunden!\n")
 
-        # ── Schritt 1: Alle Befehle schnell hintereinander senden ────────
+        # ── Initialisierung: alle Befehle mit 0x02 Praefix senden ────────
         befehle = [
             ("GET",  "/ping"),
             ("GET",  "/info"),
@@ -169,14 +187,15 @@ async def tydom_erkunden(gw_pw, challenge):
             ("GET",  "/scenarios/file"),
         ]
 
-        print("Sende alle Befehle:")
+        print("Sende Befehle (mit 0x02 Praefix als Bytes):")
         for methode, pfad in befehle:
-            print(f"  -> {methode} {pfad}")
-            await ws.send(http_msg(methode, pfad))
-            await asyncio.sleep(0.1)
+            msg_bytes = http_bytes(methode, pfad)
+            print(f"  -> {methode} {pfad}  ({len(msg_bytes)} Bytes, erstes Byte: 0x{msg_bytes[0]:02X})")
+            await ws.send(msg_bytes)
+            await asyncio.sleep(0.2)
 
-        # ── Schritt 2: 30 Sekunden lang alles roh abhoren ────────────────
-        print("\nHore 30 Sekunden ab...\n")
+        # ── 30 Sekunden abhoren ───────────────────────────────────────────
+        print("\nHoere 30 Sekunden ab...\n")
         nachricht_nr = 0
         start = time.time()
 
@@ -184,46 +203,39 @@ async def tydom_erkunden(gw_pw, challenge):
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=3)
                 nachricht_nr += 1
-                text = raw if isinstance(raw, str) else raw.decode("utf-8", errors="replace")
+                text = parse_antwort(raw)
+                raw_bytes = raw if isinstance(raw, bytes) else raw.encode()
 
-                print(f"--- Nachricht #{nachricht_nr} ({len(text)} Bytes) ---")
+                print(f"--- Nachricht #{nachricht_nr} ({len(raw_bytes)} Bytes) ---")
+                print(f"  Erstes Byte: 0x{raw_bytes[0]:02X}" if raw_bytes else "  (leer)")
 
                 if "\r\n\r\n" in text:
-                    teile = text.split("\r\n\r\n", 1)
-                    header_block = teile[0]
-                    body = teile[1].strip() if len(teile) > 1 else ""
-
-                    # Erste Header-Zeile (z.B. "HTTP/1.1 200 OK" oder "PUT /devices/data ...")
+                    header_block, body = text.split("\r\n\r\n", 1)
                     erste_zeile = header_block.split("\r\n")[0]
                     print(f"  Erste Zeile: {erste_zeile}")
-
-                    # Alle Header
-                    for h in header_block.split("\r\n")[1:]:
-                        if h.strip():
-                            print(f"  Header: {h}")
-
-                    # Body
+                    body = body.strip()
                     if body:
-                        print(f"  Body ({len(body)} Bytes):")
                         try:
                             daten = json.loads(body)
-                            # Schoen formatiert ausgeben
-                            print(json.dumps(daten, indent=2, ensure_ascii=False)[:1000])
+                            print("  Body (JSON):")
+                            print(json.dumps(daten, indent=2, ensure_ascii=False)[:800])
                         except json.JSONDecodeError:
-                            print(f"  {body[:300]}")
+                            print(f"  Body: {body[:200]}")
                     else:
                         print("  (kein Body)")
                 else:
-                    # Kein HTTP-Format - roh ausgeben
                     print(f"  RAW: {repr(text[:200])}")
-
                 print()
 
             except (asyncio.TimeoutError, asyncio.CancelledError):
                 verbleibend = int(30 - (time.time() - start))
-                print(f"  (warte... noch {verbleibend} Sek.)")
+                if verbleibend % 9 == 0:
+                    print(f"  (warte... noch {verbleibend} Sek.)")
 
         print(f"\nFertig. {nachricht_nr} Nachrichten empfangen.")
+        if nachricht_nr == 0:
+            print("TYDOM antwortet immer noch nicht.")
+            print("Naechster Schritt: Lokale Verbindung (192.168.178.24) pruefen.")
 
 
 async def main():
@@ -233,7 +245,7 @@ async def main():
         print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print("TYDOM Discovery v11 – Alle Befehle + 30 Sek. abhoren")
+    print("TYDOM Discovery v12 – Remote-Modus mit 0x02-Praefix")
     print(f"MAC: {TYDOM_MAC}\n")
 
     print("OAuth2-Token...")
