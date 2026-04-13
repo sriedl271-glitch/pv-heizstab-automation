@@ -1,9 +1,10 @@
 """
-TYDOM Discovery Script - Version 5
-Korrekte HTTP Digest Access Authentication:
-- Username = MAC-Adresse (NICHT E-Mail!)
-- Passwort = Klartext (kein Hash!)
-- Zweistufiger Prozess: erst Challenge holen, dann Digest berechnen
+TYDOM Discovery Script - Version 6
+Erweiterte Digest-Auth-Diagnose:
+- Vollstaendiger WWW-Authenticate Header wird ausgegeben
+- opaque-Feld wird erkannt und zurueckgesendet
+- Mehrere URI-Varianten werden getestet
+- Mehrere Username-Varianten werden getestet
 """
 import asyncio
 import hashlib
@@ -25,43 +26,65 @@ def md5(text: str) -> str:
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
 
-def berechne_digest_header(username, password, realm, nonce, qop, uri, methode="GET"):
+def parse_digest_header(www_auth: str) -> dict:
+    """Parst den WWW-Authenticate Digest Header robust."""
+    params = {}
+    # Variante mit Anfuehrungszeichen: key="value"
+    for match in re.finditer(r'(\w+)="([^"]*)"', www_auth):
+        params[match.group(1)] = match.group(2)
+    # Variante ohne Anfuehrungszeichen: key=value
+    for match in re.finditer(r'(\w+)=([^",\s]+)', www_auth):
+        if match.group(1) not in params:
+            params[match.group(1)] = match.group(2)
+    return params
+
+
+def berechne_digest_header(username, password, params, uri, methode="GET", algo="MD5"):
     """
-    Berechnet den HTTP Digest Authorization Header.
-    Fuer qop=auth wird nc und cnonce benoetigt.
+    Berechnet den Authorization-Header fuer HTTP Digest Auth.
+    Unterstuetzt MD5 und MD5-sess.
     """
+    realm   = params.get("realm", "")
+    nonce   = params.get("nonce", "")
+    qop     = params.get("qop", "")
+    opaque  = params.get("opaque", "")
+    algorithm = params.get("algorithm", algo)
+
+    nc     = "00000001"
+    cnonce = secrets.token_hex(8)
+
     ha1 = md5(f"{username}:{realm}:{password}")
+    if algorithm.upper() == "MD5-SESS":
+        ha1 = md5(f"{ha1}:{nonce}:{cnonce}")
+
     ha2 = md5(f"{methode}:{uri}")
 
     if qop and "auth" in qop:
-        nc = "00000001"
-        cnonce = secrets.token_hex(8)
         response = md5(f"{ha1}:{nonce}:{nc}:{cnonce}:{qop}:{ha2}")
         header = (
             f'Digest username="{username}", realm="{realm}", '
-            f'nonce="{nonce}", uri="{uri}", qop={qop}, '
-            f'nc={nc}, cnonce="{cnonce}", response="{response}"'
+            f'nonce="{nonce}", uri="{uri}", algorithm={algorithm}, '
+            f'qop={qop}, nc={nc}, cnonce="{cnonce}", response="{response}"'
         )
     else:
-        # Ohne qop (einfacheres Format)
         response = md5(f"{ha1}:{nonce}:{ha2}")
         header = (
             f'Digest username="{username}", realm="{realm}", '
-            f'nonce="{nonce}", uri="{uri}", response="{response}"'
+            f'nonce="{nonce}", uri="{uri}", algorithm={algorithm}, '
+            f'response="{response}"'
         )
+
+    if opaque:
+        header += f', opaque="{opaque}"'
 
     return header
 
 
-def schritt1_challenge_holen(username, password):
-    """
-    Schritt 1: HTTP GET -> Server gibt 401 mit Digest-Challenge zurueck.
-    Wir lesen realm, nonce, qop aus dem WWW-Authenticate Header.
-    """
+def schritt1_challenge_holen():
+    """Holt die Digest-Challenge vom TYDOM-Server."""
     print("\n" + "=" * 60)
     print("SCHRITT 1: Digest-Challenge vom Server holen")
     print(f"URL: {HTTPS_URL}")
-    print(f"Username: {username}")
     print("=" * 60)
 
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
@@ -75,70 +98,48 @@ def schritt1_challenge_holen(username, password):
 
     try:
         urllib.request.urlopen(req, context=ssl_ctx, timeout=10)
-        print("UNERWARTETE 200-Antwort ohne Auth – das sollte nicht passieren.")
+        print("Unerwartete 200-Antwort – kein Auth erforderlich?")
         return None
     except urllib.error.HTTPError as e:
         print(f"HTTP Status: {e.code}")
         www_auth = e.headers.get("WWW-Authenticate", "")
-        print(f"WWW-Authenticate: {www_auth}")
 
-        if e.code == 401 and www_auth.startswith("Digest"):
-            # Parameter aus dem Header extrahieren
-            params = {}
-            for match in re.finditer(r'(\w+)="?([^",\s]+)"?', www_auth):
-                params[match.group(1)] = match.group(2)
+        # Vollstaendigen Header ausgeben (wichtig fuer Diagnose)
+        print(f"\nVollstaendiger WWW-Authenticate Header:")
+        print(f"  {www_auth}")
 
-            realm  = params.get("realm", "")
-            nonce  = params.get("nonce", "")
-            qop    = params.get("qop", "")
-
-            print(f"\nExtrahierte Challenge:")
-            print(f"  realm  = {realm}")
-            print(f"  nonce  = {nonce}")
-            print(f"  qop    = {qop}")
-
-            if realm and nonce:
-                return {"realm": realm, "nonce": nonce, "qop": qop}
-            else:
-                print("FEHLER: realm oder nonce fehlen im Header.")
-                return None
+        if e.code == 401 and "Digest" in www_auth:
+            params = parse_digest_header(www_auth)
+            print(f"\nExtrahierte Felder:")
+            for k, v in params.items():
+                if k == "nonce":
+                    print(f"  {k} = {v[:20]}... (gekuerzt)")
+                else:
+                    print(f"  {k} = {v}")
+            return params
         elif e.code == 401:
-            print("401, aber kein Digest-Header. Unbekannte Auth-Methode.")
-            print(f"Alle Header: {dict(e.headers)}")
+            print("\n401, aber kein Digest-Header!")
+            print(f"Alle Headers: {dict(e.headers)}")
             return None
         else:
-            print(f"Unerwarteter Status {e.code}")
+            print(f"Unerwarteter Status: {e.code}")
             return None
     except Exception as e:
         print(f"Fehler: {type(e).__name__}: {e}")
         return None
 
 
-async def schritt2_websocket_verbinden(username, password, challenge):
-    """
-    Schritt 2: WebSocket mit berechnetem Digest-Header verbinden.
-    """
-    print("\n" + "=" * 60)
-    print("SCHRITT 2: WebSocket mit Digest Auth verbinden")
-    print("=" * 60)
-
-    uri_pfad = f"/mediation/client?mac={TYDOM_MAC}&appli=1"
-
-    auth_header = berechne_digest_header(
-        username=username,
-        password=password,
-        realm=challenge["realm"],
-        nonce=challenge["nonce"],
-        qop=challenge["qop"],
-        uri=uri_pfad,
-        methode="GET",
-    )
-
-    print(f"Authorization: {auth_header[:80]}...")
-
+async def teste_verbindung(label, username, password, params, uri):
+    """Testet eine einzelne Digest-Auth-Kombination per WebSocket."""
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
+
+    auth_header = berechne_digest_header(username, password, params, uri)
+
+    print(f"\n--- {label} ---")
+    print(f"  username = {username}")
+    print(f"  uri      = {uri}")
 
     try:
         async with websockets.connect(
@@ -151,9 +152,8 @@ async def schritt2_websocket_verbinden(username, password, challenge):
             open_timeout=15,
             ping_interval=None,
         ) as ws:
-            print("\n>>> VERBINDUNG ERFOLGREICH! <<<")
+            print("  >>> VERBINDUNG ERFOLGREICH! <<<")
 
-            # Geraete abfragen
             anfrage = (
                 "GET /devices/data HTTP/1.1\r\n"
                 "Content-Length: 0\r\n"
@@ -170,78 +170,62 @@ async def schritt2_websocket_verbinden(username, password, challenge):
                     body = text.split("\r\n\r\n", 1)[1]
                     try:
                         daten = json.loads(body)
-                        print(f"Geraete: {json.dumps(daten, ensure_ascii=False)[:500]}")
+                        print(f"  Geraete: {json.dumps(daten, ensure_ascii=False)[:300]}")
                     except json.JSONDecodeError:
-                        print(f"Antwort (kein JSON): {body[:300]}")
+                        print(f"  Antwort: {body[:200]}")
                 else:
-                    print(f"Antwort: {text[:300]}")
+                    print(f"  Antwort: {text[:200]}")
             except asyncio.TimeoutError:
-                print("Timeout beim Lesen – Verbindung steht aber!")
-
+                print("  Timeout beim Lesen – Verbindung steht aber!")
             return True
 
     except Exception as e:
         fehler = str(e)
         if "401" in fehler:
-            print(f"-> 401 Unauthorized – Digest-Berechnung noch nicht korrekt")
-            print(f"   Details: {fehler[:200]}")
+            print(f"  -> 401")
         elif "400" in fehler:
-            print(f"-> 400 Bad Request – Format-Problem")
+            print(f"  -> 400 Bad Request")
         elif "403" in fehler:
-            print(f"-> 403 Forbidden")
+            print(f"  -> 403 Forbidden")
         else:
-            print(f"-> {type(e).__name__}: {fehler[:200]}")
+            print(f"  -> {type(e).__name__}: {fehler[:100]}")
         return False
 
 
-async def schritt3_fallback_mit_email(email, password, challenge):
-    """
-    Fallback: Digest Auth mit E-Mail als Username statt MAC.
-    """
+async def schritt2_alle_kombinationen(email, passwort, params):
+    """Testet systematisch alle sinnvollen Kombinationen."""
     print("\n" + "=" * 60)
-    print("SCHRITT 3: Fallback – E-Mail als Username")
+    print("SCHRITT 2: Systematische Kombinationen testen")
     print("=" * 60)
 
-    uri_pfad = f"/mediation/client?mac={TYDOM_MAC}&appli=1"
+    # URI-Varianten
+    uri_mit_params  = f"/mediation/client?mac={TYDOM_MAC}&appli=1"
+    uri_ohne_params = "/mediation/client"
+    uri_voll        = f"https://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
 
-    auth_header = berechne_digest_header(
-        username=email,
-        password=password,
-        realm=challenge["realm"],
-        nonce=challenge["nonce"],
-        qop=challenge["qop"],
-        uri=uri_pfad,
-        methode="GET",
-    )
+    # Passwort-Varianten
+    pw_plain = passwort
+    pw_md5   = md5(passwort)
 
-    ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
-    ssl_ctx.check_hostname = False
-    ssl_ctx.verify_mode = ssl.CERT_NONE
+    kombinationen = [
+        # (Label, username, password, uri)
+        ("MAC + Klartext + URI mit Params",   TYDOM_MAC, pw_plain, uri_mit_params),
+        ("MAC + Klartext + URI ohne Params",  TYDOM_MAC, pw_plain, uri_ohne_params),
+        ("Email + Klartext + URI mit Params", email,     pw_plain, uri_mit_params),
+        ("Email + Klartext + URI ohne Params",email,     pw_plain, uri_ohne_params),
+        ("MAC + MD5-PW + URI mit Params",     TYDOM_MAC, pw_md5,   uri_mit_params),
+        ("Email + MD5-PW + URI mit Params",   email,     pw_md5,   uri_mit_params),
+        ("MAC + Klartext + volle URI",        TYDOM_MAC, pw_plain, uri_voll),
+    ]
 
-    print(f"Username: {email}")
-    print(f"Authorization: {auth_header[:80]}...")
-
-    try:
-        async with websockets.connect(
-            TYDOM_URL,
-            additional_headers={
-                "Authorization": auth_header,
-                "User-Agent": "TydomApp/4.17.41",
-            },
-            ssl=ssl_ctx,
-            open_timeout=15,
-            ping_interval=None,
-        ) as ws:
-            print("\n>>> VERBINDUNG ERFOLGREICH! <<<")
+    for label, user, pw, uri in kombinationen:
+        ok = await teste_verbindung(label, user, pw, params, uri)
+        if ok:
+            print(f"\n*** ERFOLG mit: {label} ***")
             return True
+        await asyncio.sleep(0.3)
 
-    except Exception as e:
-        fehler = str(e)
-        if "401" in fehler:
-            print(f"-> 401 – Auch mit E-Mail fehlgeschlagen")
-        else:
-            print(f"-> {type(e).__name__}: {fehler[:200]}")
-        return False
+    return False
 
 
 async def main():
@@ -252,36 +236,28 @@ async def main():
         print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print("TYDOM Discovery v5 – Digest Auth")
+    print("TYDOM Discovery v6 – Erweiterte Digest-Auth-Diagnose")
     print(f"MAC:   {TYDOM_MAC}")
     print(f"Email: {email[:4]}***")
 
-    # Schritt 1: Challenge holen
-    challenge = schritt1_challenge_holen(TYDOM_MAC, passwort)
+    # Challenge holen
+    params = schritt1_challenge_holen()
 
-    if not challenge:
-        print("\nKonnte keine Digest-Challenge erhalten.")
-        print("Moegliche Ursachen:")
-        print("  - Server nicht erreichbar")
-        print("  - Server verwendet kein HTTP Digest (unbekanntes Format)")
+    if not params:
+        print("\nKonnte keine Digest-Challenge erhalten – Abbruch.")
         return
 
-    # Schritt 2: WebSocket mit MAC als Username
-    ok = await schritt2_websocket_verbinden(TYDOM_MAC, passwort, challenge)
-
-    if not ok:
-        # Schritt 3: Fallback mit E-Mail als Username
-        ok = await schritt3_fallback_mit_email(email, passwort, challenge)
+    # Alle Kombinationen testen
+    ok = await schritt2_alle_kombinationen(email, passwort, params)
 
     print("\n" + "=" * 60)
     if ok:
         print("ERGEBNIS: VERBINDUNG ERFOLGREICH!")
-        print("Naechster Schritt: TYDOM-Steuerung in main.py einbauen")
     else:
-        print("ERGEBNIS: Alle Versuche fehlgeschlagen")
+        print("ERGEBNIS: Alle Kombinationen fehlgeschlagen.")
         print("")
-        print("Bitte sende die Ausgabe von Schritt 1 (realm, nonce, qop)")
-        print("damit wir das korrekte Auth-Format ermitteln koennen.")
+        print("Wichtig: Bitte sende den vollstaendigen")
+        print("WWW-Authenticate Header aus Schritt 1.")
     print("=" * 60)
 
 
