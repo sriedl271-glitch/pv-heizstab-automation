@@ -21,8 +21,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: requests installieren
-        run: pip install requests
+      - name: Pakete installieren
+        run: pip install requests websockets
 
       - name: Script ausführen
         env:
@@ -33,6 +33,8 @@ jobs:
           ISOLARCLOUD_USER_ACCOUNT: ${{ secrets.ISOLARCLOUD_USER_ACCOUNT }}
           ISOLARCLOUD_USER_PASSWORD: ${{ secrets.ISOLARCLOUD_USER_PASSWORD }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TYDOM_EMAIL: ${{ secrets.TYDOM_EMAIL }}
+          TYDOM_PASSWORD: ${{ secrets.TYDOM_PASSWORD }}
         run: python main.py
 
       - name: Git konfigurieren
