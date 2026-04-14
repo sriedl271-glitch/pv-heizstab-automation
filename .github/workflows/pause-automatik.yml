@@ -1,0 +1,74 @@
+name: Automatik Pause
+
+on:
+  workflow_dispatch:
+    inputs:
+      aktion:
+        description: "Aktion waehlen"
+        required: true
+        default: "Pausieren"
+        type: choice
+        options:
+          - Pausieren
+          - Pause aufheben
+      pause_bis:
+        description: "Pause bis (JJJJ-MM-TT) – nur bei 'Pausieren' benoetigt"
+        required: false
+        type: string
+      grund:
+        description: "Grund (z.B. Urlaub, Wartung)"
+        required: false
+        default: "Manuell pausiert"
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  pause-setzen:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository laden
+        uses: actions/checkout@v4
+
+      - name: Pause-Datei schreiben
+        run: |
+          python3 - <<'EOF'
+          import json, sys
+          from datetime import datetime
+
+          aktion    = "${{ github.event.inputs.aktion }}"
+          pause_bis = "${{ github.event.inputs.pause_bis }}".strip()
+          grund     = "${{ github.event.inputs.grund }}".strip() or "Manuell pausiert"
+
+          if aktion == "Pausieren":
+              if not pause_bis:
+                  print("FEHLER: Kein Datum eingegeben!")
+                  sys.exit(1)
+              try:
+                  datetime.strptime(pause_bis, "%Y-%m-%d")
+              except ValueError:
+                  print(f"FEHLER: Datum '{pause_bis}' ist ungueltig. Format: JJJJ-MM-TT")
+                  sys.exit(1)
+              daten = {"pause_bis": pause_bis, "grund": grund}
+              print(f"Automatik pausiert bis {pause_bis} (Grund: {grund})")
+          else:
+              daten = {}
+              print("Automatik-Pause aufgehoben – Automatik laeuft wieder.")
+
+          with open("automation_pause.json", "w", encoding="utf-8") as f:
+              json.dump(daten, f, ensure_ascii=False, indent=2)
+          EOF
+
+      - name: Git konfigurieren
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: automation_pause.json speichern
+        run: |
+          git add automation_pause.json
+          git diff --cached --quiet && echo "Keine Aenderung." || \
+            git commit -m "Automatik-Pause: ${{ github.event.inputs.aktion }} ${{ github.event.inputs.pause_bis }}"
+          git push
