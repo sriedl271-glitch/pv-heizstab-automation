@@ -1,8 +1,7 @@
 """
-TYDOM Discovery Script - Version 12
-Entscheidender Fix: Remote-Modus erfordert Praefix-Byte 0x02 vor jeder Nachricht!
-Quelle: hass-deltadore-tydom-component, TydomClient._cmd_prefix = b"\x02" (remote)
-Nachrichten werden als BYTES gesendet, nicht als Text.
+TYDOM Discovery Script - Version 13
+Gezielt: Geraete-Namen, IDs und Szenarien uebersichtlich ausgeben.
+Basiert auf v12 (0x02 Praefix funktioniert).
 """
 import asyncio
 import hashlib
@@ -20,9 +19,7 @@ import websockets
 TYDOM_MAC   = "001A25067773"
 TYDOM_WSS   = f"wss://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
 TYDOM_HTTPS = f"https://mediation.tydom.com/mediation/client?mac={TYDOM_MAC}&appli=1"
-
-# Remote-Modus: jede Nachricht beginnt mit diesem Byte
-CMD_PREFIX = b"\x02"
+CMD_PREFIX  = b"\x02"
 
 DELTADORE_AUTH_URL = (
     "https://deltadoreadb2ciot.b2clogin.com"
@@ -46,10 +43,8 @@ DELTADORE_API_SITES = (
 def md5(text):
     return hashlib.md5(text.encode("utf-8")).hexdigest()
 
-
 def transac_id():
     return str(time.time_ns() // 1_000_000)
-
 
 def parse_www_authenticate(header):
     params = {}
@@ -60,9 +55,8 @@ def parse_www_authenticate(header):
             params[m.group(1)] = m.group(2)
     return params
 
-
 def berechne_digest(username, password, cp, uri, methode="GET"):
-    realm, nonce, qop = cp.get("realm", ""), cp.get("nonce", ""), cp.get("qop", "")
+    realm, nonce, qop = cp.get("realm",""), cp.get("nonce",""), cp.get("qop","")
     nc, cnonce = "00000001", secrets.token_hex(8)
     ha1 = md5(f"{username}:{realm}:{password}")
     ha2 = md5(f"{methode}:{uri}")
@@ -78,10 +72,8 @@ def berechne_digest(username, password, cp, uri, methode="GET"):
         hdr += f', opaque="{cp["opaque"]}"'
     return hdr
 
-
 def oauth2_token(email, passwort):
-    req = urllib.request.Request(
-        DELTADORE_AUTH_URL, headers={"User-Agent": "TydomApp/4.17.41"})
+    req = urllib.request.Request(DELTADORE_AUTH_URL, headers={"User-Agent":"TydomApp/4.17.41"})
     with urllib.request.urlopen(req, timeout=15) as r:
         token_endpoint = json.loads(r.read().decode())["token_endpoint"]
     post = urllib.parse.urlencode({
@@ -89,19 +81,14 @@ def oauth2_token(email, passwort):
         "grant_type": "password", "client_id": DELTADORE_CLIENT_ID,
         "scope": DELTADORE_SCOPE,
     }).encode("utf-8")
-    req2 = urllib.request.Request(
-        token_endpoint, data=post, method="POST",
-        headers={"Content-Type": "application/x-www-form-urlencoded",
-                 "User-Agent": "TydomApp/4.17.41"})
+    req2 = urllib.request.Request(token_endpoint, data=post, method="POST",
+        headers={"Content-Type":"application/x-www-form-urlencoded","User-Agent":"TydomApp/4.17.41"})
     with urllib.request.urlopen(req2, timeout=15) as r:
         return json.loads(r.read().decode())["access_token"]
 
-
 def gateway_passwort(access_token):
-    req = urllib.request.Request(
-        DELTADORE_API_SITES + TYDOM_MAC,
-        headers={"Authorization": f"Bearer {access_token}",
-                 "User-Agent": "TydomApp/4.17.41"})
+    req = urllib.request.Request(DELTADORE_API_SITES + TYDOM_MAC,
+        headers={"Authorization": f"Bearer {access_token}", "User-Agent": "TydomApp/4.17.41"})
     with urllib.request.urlopen(req, timeout=15) as r:
         data = json.loads(r.read().decode())
     def suche(obj):
@@ -109,56 +96,48 @@ def gateway_passwort(access_token):
             if "password" in obj and isinstance(obj["password"], str):
                 return obj["password"]
             for v in obj.values():
-                r = suche(v)
-                if r:
-                    return r
+                r = suche(v);
+                if r: return r
         elif isinstance(obj, list):
             for item in obj:
                 r = suche(item)
-                if r:
-                    return r
+                if r: return r
         return None
     return suche(data)
-
 
 def digest_challenge():
     ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
     ssl_ctx.check_hostname = False
     ssl_ctx.verify_mode = ssl.CERT_NONE
-    req = urllib.request.Request(
-        TYDOM_HTTPS, headers={"User-Agent": "TydomApp/4.17.41"})
+    req = urllib.request.Request(TYDOM_HTTPS, headers={"User-Agent":"TydomApp/4.17.41"})
     try:
         urllib.request.urlopen(req, context=ssl_ctx, timeout=10)
     except urllib.error.HTTPError as e:
-        www_auth = e.headers.get("WWW-Authenticate", "")
+        www_auth = e.headers.get("WWW-Authenticate","")
         if e.code == 401 and "Digest" in www_auth:
             return parse_www_authenticate(www_auth)
     return None
 
-
-def http_bytes(methode, pfad, body=""):
-    """Erstellt eine HTTP-over-WebSocket Nachricht als Bytes mit 0x02 Praefix."""
+def sende(methode, pfad, body=""):
     laenge = len(body.encode("utf-8")) if body else 0
-    nachricht = (
-        f"{methode} {pfad} HTTP/1.1\r\n"
-        f"Content-Length: {laenge}\r\n"
-        f"Content-Type: application/json; charset=UTF-8\r\n"
-        f"Transac-Id: {transac_id()}\r\n"
-        f"\r\n{body}"
-    )
-    return CMD_PREFIX + nachricht.encode("ascii")
+    msg = (f"{methode} {pfad} HTTP/1.1\r\n"
+           f"Content-Length: {laenge}\r\nContent-Type: application/json; charset=UTF-8\r\n"
+           f"Transac-Id: {transac_id()}\r\n\r\n{body}")
+    return CMD_PREFIX + msg.encode("ascii")
 
-
-def parse_antwort(raw):
-    """Parst eine eingehende TYDOM-Nachricht (mit moeglichem 0x02 Praefix)."""
-    if isinstance(raw, bytes):
-        # 0x02 Praefix entfernen falls vorhanden
-        if raw and raw[0] == 0x02:
-            raw = raw[1:]
-        text = raw.decode("utf-8", errors="replace")
-    else:
-        text = raw
-    return text
+def parse_body(raw):
+    data = raw if isinstance(raw, bytes) else raw.encode()
+    if data and data[0] == 0x02:
+        data = data[1:]
+    text = data.decode("utf-8", errors="replace")
+    if "\r\n\r\n" in text:
+        header, body = text.split("\r\n\r\n", 1)
+        erste_zeile = header.split("\r\n")[0]
+        try:
+            return erste_zeile, json.loads(body.strip())
+        except Exception:
+            return erste_zeile, body.strip()
+    return text[:60], None
 
 
 async def tydom_erkunden(gw_pw, challenge):
@@ -175,8 +154,8 @@ async def tydom_erkunden(gw_pw, challenge):
     ) as ws:
         print("Verbunden!\n")
 
-        # ── Initialisierung: alle Befehle mit 0x02 Praefix senden ────────
-        befehle = [
+        # Alle Befehle senden
+        for methode, pfad in [
             ("GET",  "/ping"),
             ("GET",  "/info"),
             ("GET",  "/groups/file"),
@@ -185,57 +164,35 @@ async def tydom_erkunden(gw_pw, challenge):
             ("GET",  "/devices/meta"),
             ("GET",  "/devices/data"),
             ("GET",  "/scenarios/file"),
-        ]
-
-        print("Sende Befehle (mit 0x02 Praefix als Bytes):")
-        for methode, pfad in befehle:
-            msg_bytes = http_bytes(methode, pfad)
-            print(f"  -> {methode} {pfad}  ({len(msg_bytes)} Bytes, erstes Byte: 0x{msg_bytes[0]:02X})")
-            await ws.send(msg_bytes)
+        ]:
+            await ws.send(sende(methode, pfad))
             await asyncio.sleep(0.2)
 
-        # ── 30 Sekunden abhoren ───────────────────────────────────────────
-        print("\nHoere 30 Sekunden ab...\n")
-        nachricht_nr = 0
+        # Alle Antworten sammeln
+        alle_daten = {}
         start = time.time()
-
-        while time.time() - start < 30:
+        nr = 0
+        while time.time() - start < 20:
             try:
                 raw = await asyncio.wait_for(ws.recv(), timeout=3)
-                nachricht_nr += 1
-                text = parse_antwort(raw)
-                raw_bytes = raw if isinstance(raw, bytes) else raw.encode()
-
-                print(f"--- Nachricht #{nachricht_nr} ({len(raw_bytes)} Bytes) ---")
-                print(f"  Erstes Byte: 0x{raw_bytes[0]:02X}" if raw_bytes else "  (leer)")
-
-                if "\r\n\r\n" in text:
-                    header_block, body = text.split("\r\n\r\n", 1)
-                    erste_zeile = header_block.split("\r\n")[0]
-                    print(f"  Erste Zeile: {erste_zeile}")
-                    body = body.strip()
-                    if body:
-                        try:
-                            daten = json.loads(body)
-                            print("  Body (JSON):")
-                            print(json.dumps(daten, indent=2, ensure_ascii=False)[:800])
-                        except json.JSONDecodeError:
-                            print(f"  Body: {body[:200]}")
-                    else:
-                        print("  (kein Body)")
-                else:
-                    print(f"  RAW: {repr(text[:200])}")
-                print()
-
+                nr += 1
+                erste_zeile, body = parse_body(raw)
+                if body:
+                    alle_daten[nr] = (erste_zeile, body)
             except (asyncio.TimeoutError, asyncio.CancelledError):
-                verbleibend = int(30 - (time.time() - start))
-                if verbleibend % 9 == 0:
-                    print(f"  (warte... noch {verbleibend} Sek.)")
+                if time.time() - start > 12:
+                    break
 
-        print(f"\nFertig. {nachricht_nr} Nachrichten empfangen.")
-        if nachricht_nr == 0:
-            print("TYDOM antwortet immer noch nicht.")
-            print("Naechster Schritt: Lokale Verbindung (192.168.178.24) pruefen.")
+        print(f"{nr} Nachrichten empfangen.\n")
+
+        # ── VOLLSTAENDIGE JSON-AUSGABE aller Nachrichten ──────────────────
+        for n, (zeile, body) in alle_daten.items():
+            print(f"\n{'='*60}")
+            print(f"Nachricht #{n}: {zeile}")
+            print('='*60)
+            print(json.dumps(body, indent=2, ensure_ascii=False))
+
+        print("\n\nFERTIG.")
 
 
 async def main():
@@ -245,18 +202,12 @@ async def main():
         print("FEHLER: TYDOM_EMAIL oder TYDOM_PASSWORD fehlen!")
         return
 
-    print("TYDOM Discovery v12 – Remote-Modus mit 0x02-Praefix")
+    print("TYDOM Discovery v13 – Vollstaendige Datenausgabe")
     print(f"MAC: {TYDOM_MAC}\n")
 
-    print("OAuth2-Token...")
-    token = oauth2_token(email, passwort)
-    print("OK")
-
-    print("Gateway-Passwort...")
-    gw_pw = gateway_passwort(token)
-    print(f"OK ({gw_pw[:4]}***)")
-
-    print("Digest-Challenge...")
+    print("OAuth2 + Gateway-Passwort + Challenge...")
+    token    = oauth2_token(email, passwort)
+    gw_pw    = gateway_passwort(token)
     challenge = digest_challenge()
     print(f"OK (realm={challenge.get('realm')})\n")
 
