@@ -432,34 +432,73 @@ async def _tydom_async(gw_pw: str, challenge: dict, szenarien_ids: list = None) 
             await ws.send(_http_msg(methode, pfad))
             await asyncio.sleep(0.3)
 
-        # Init-Antworten abwarten bevor Szenarien gesendet werden
-        if szenarien_ids:
-            await asyncio.sleep(3)
-
-        # Szenarien ausfuehren
-        if szenarien_ids:
-            for scn_id in szenarien_ids:
-                await ws.send(_http_msg("POST", f"/scenarios/{scn_id}/leftover", "{}"))
-                print(f"   ▶️  Szenario {scn_id} gesendet")
-                await asyncio.sleep(0.5)
-            # Nach dem Schalten: Zustand nochmal lesen
-            # 10s warten – physisches Relais braucht Zeit zum Schalten und Melden
-            await asyncio.sleep(10)
-            await ws.send(_http_msg("GET", "/devices/data"))
-            await asyncio.sleep(0.3)
-
-        # Antworten sammeln
+        # Init-Antworten sammeln und Endpoint-IDs der Heizstaebe erfassen
+        ep_map = {}  # device_id -> endpoint_id
         device_data = None
         start = time.time()
-        while time.time() - start < 15:
+        while time.time() - start < 8:
             try:
-                raw = await asyncio.wait_for(ws.recv(), timeout=3)
+                raw = await asyncio.wait_for(ws.recv(), timeout=2)
                 _, body = _parse_nachricht(raw)
                 if isinstance(body, list) and any("endpoints" in str(g) for g in body):
                     device_data = body
+                    for geraet in body:
+                        gid = geraet.get("id")
+                        if gid in (GERAET_3KW, GERAET_6KW):
+                            for ep in geraet.get("endpoints", []):
+                                ep_id = ep.get("id")
+                                for dp in ep.get("data", []):
+                                    if dp.get("name") == "level":
+                                        ep_map[gid] = ep_id
+                                        break
             except asyncio.TimeoutError:
-                if time.time() - start > 8:
+                if time.time() - start > 5:
                     break
+        if ep_map:
+            print(f"   Endpoint-IDs: 3kW={ep_map.get(GERAET_3KW)}, 6kW={ep_map.get(GERAET_6KW)}")
+        else:
+            print("   ⚠️  Keine Endpoint-IDs gefunden – Fallback auf Szenarien")
+
+        # Geraete direkt schalten: PUT /devices/{id}/endpoints/{ep}/data
+        # Das ist zuverlaessiger als POST /scenarios/{id}/leftover ueber Cloud
+        if szenarien_ids:
+            SZENARIO_ZU_BEFEHL = {
+                SCN_EIN_3KW: (GERAET_3KW, 100),
+                SCN_AUS_3KW: (GERAET_3KW,   0),
+                SCN_EIN_6KW: (GERAET_6KW, 100),
+                SCN_AUS_6KW: (GERAET_6KW,   0),
+            }
+            for scn_id in szenarien_ids:
+                befehl = SZENARIO_ZU_BEFEHL.get(scn_id)
+                if not befehl:
+                    continue
+                device_id, level = befehl
+                ep_id = ep_map.get(device_id)
+                if ep_id is not None:
+                    body_str = json.dumps([{"name": "level", "value": level}])
+                    pfad = f"/devices/{device_id}/endpoints/{ep_id}/data"
+                    await ws.send(_http_msg("PUT", pfad, body_str))
+                    print(f"   ▶️  PUT {pfad} level={level}")
+                else:
+                    # Fallback: Szenario-Befehl
+                    await ws.send(_http_msg("POST", f"/scenarios/{scn_id}/leftover", "{}"))
+                    print(f"   ▶️  Szenario {scn_id} gesendet (Fallback)")
+                await asyncio.sleep(0.5)
+            # Nach Schalten: Zustand nochmal lesen
+            await asyncio.sleep(10)
+            await ws.send(_http_msg("GET", "/devices/data"))
+            await asyncio.sleep(0.3)
+            # Post-Schalt-Antworten sammeln
+            start2 = time.time()
+            while time.time() - start2 < 15:
+                try:
+                    raw = await asyncio.wait_for(ws.recv(), timeout=3)
+                    _, body = _parse_nachricht(raw)
+                    if isinstance(body, list) and any("endpoints" in str(g) for g in body):
+                        device_data = body
+                except asyncio.TimeoutError:
+                    if time.time() - start2 > 8:
+                        break
 
     if not device_data:
         print("❌ TYDOM: Keine Gerätedaten empfangen.")
@@ -721,7 +760,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print("ℹ️  3kW AUS nach Schaltbefehl – Gerät schaltet noch, kein 2h-Lock")
             else:
                 # Manuell AUS -> 2h-Sperre
-                bis = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
+                bis = (datetime.now() + timedelta(hours=4)).strftime("%H:%M")  # UTC+2h Sperre +2h CEST
                 status["manuell_sperre_bis"] = (datetime.now() + timedelta(hours=2)).isoformat()
                 status["modus_3kw"] = None
                 msg = f"🖐️ 3kW manuell ausgeschaltet – Automatik gesperrt bis {bis}"
@@ -735,7 +774,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if schalt_kuerzlich:
                 print("ℹ️  6kW AUS nach Schaltbefehl – Gerät schaltet noch, kein 2h-Lock")
             else:
-                bis = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
+                bis = (datetime.now() + timedelta(hours=4)).strftime("%H:%M")  # UTC+2h Sperre +2h CEST
                 status["manuell_sperre_bis"] = (datetime.now() + timedelta(hours=2)).isoformat()
                 status["modus_6kw"] = None
                 msg = f"🖐️ 6kW manuell ausgeschaltet – Automatik gesperrt bis {bis}"
