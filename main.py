@@ -418,13 +418,23 @@ async def _tydom_async(gw_pw: str, challenge: dict, szenarien_ids: list = None) 
     async with websockets.connect(
         TYDOM_WSS,
         additional_headers={"Authorization": auth, "User-Agent": "TydomApp/4.17.41"},
-        ssl=ssl_ctx, open_timeout=20, ping_interval=None,
+        ssl=ssl_ctx, open_timeout=20, ping_interval=10,
     ) as ws:
-        # Init + Geraetedaten anfordern
-        for methode, pfad in [("GET", "/ping"), ("POST", "/refresh/all"),
-                               ("GET", "/devices/data")]:
+        # Vollstaendige Init-Sequenz (wie Discovery-Script)
+        for methode, pfad in [
+            ("GET",  "/ping"),
+            ("GET",  "/info"),
+            ("POST", "/refresh/all"),
+            ("GET",  "/configs/file"),
+            ("GET",  "/devices/data"),
+            ("GET",  "/scenarios/file"),
+        ]:
             await ws.send(_http_msg(methode, pfad))
             await asyncio.sleep(0.3)
+
+        # Init-Antworten abwarten bevor Szenarien gesendet werden
+        if szenarien_ids:
+            await asyncio.sleep(3)
 
         # Szenarien ausfuehren
         if szenarien_ids:
