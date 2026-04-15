@@ -433,7 +433,8 @@ async def _tydom_async(gw_pw: str, challenge: dict, szenarien_ids: list = None) 
                 print(f"   ▶️  Szenario {scn_id} gesendet")
                 await asyncio.sleep(0.5)
             # Nach dem Schalten: Zustand nochmal lesen
-            await asyncio.sleep(2)
+            # 10s warten – physisches Relais braucht Zeit zum Schalten und Melden
+            await asyncio.sleep(10)
             await ws.send(_http_msg("GET", "/devices/data"))
             await asyncio.sleep(0.3)
 
@@ -692,25 +693,43 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
     tydom_3kw   = tydom_zustand.get("3kw_ein", ist_3kw_ein)
     tydom_6kw   = tydom_zustand.get("6kw_ein", ist_6kw_ein)
 
+    # Prüfen ob kurz vorher ein Schaltbefehl gesendet wurde (max. 15 Min.)
+    # Falls ja: kein 2h-Lock – Gerät könnte noch schalten
+    letzte_schalt = status.get("letzte_schaltzeit")
+    schalt_kuerzlich = False
+    if letzte_schalt:
+        try:
+            diff = (datetime.now() - datetime.fromisoformat(letzte_schalt)).total_seconds()
+            schalt_kuerzlich = diff < 900  # 15 Minuten
+        except Exception:
+            pass
+
     if tydom_3kw != ist_3kw_ein:
         if not tydom_3kw and ist_3kw_ein:
-            # Manuell AUS -> 2h-Sperre
-            bis = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
-            status["manuell_sperre_bis"] = (datetime.now() + timedelta(hours=2)).isoformat()
-            status["modus_3kw"] = None
-            msg = f"🖐️ 3kW manuell ausgeschaltet – Automatik gesperrt bis {bis}"
-            print(msg);  meldungen.append(msg)
+            if schalt_kuerzlich:
+                # Gerät schaltet noch – kein Lock, Zustand aus TYDOM übernehmen
+                print("ℹ️  3kW AUS nach Schaltbefehl – Gerät schaltet noch, kein 2h-Lock")
+            else:
+                # Manuell AUS -> 2h-Sperre
+                bis = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
+                status["manuell_sperre_bis"] = (datetime.now() + timedelta(hours=2)).isoformat()
+                status["modus_3kw"] = None
+                msg = f"🖐️ 3kW manuell ausgeschaltet – Automatik gesperrt bis {bis}"
+                print(msg);  meldungen.append(msg)
         else:
             print("ℹ️  3kW manuell EIN erkannt – Automatik laeuft weiter.")
         status["heizstab_3kw_ein"] = tydom_3kw
 
     if tydom_6kw != ist_6kw_ein:
         if not tydom_6kw and ist_6kw_ein:
-            bis = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
-            status["manuell_sperre_bis"] = (datetime.now() + timedelta(hours=2)).isoformat()
-            status["modus_6kw"] = None
-            msg = f"🖐️ 6kW manuell ausgeschaltet – Automatik gesperrt bis {bis}"
-            print(msg);  meldungen.append(msg)
+            if schalt_kuerzlich:
+                print("ℹ️  6kW AUS nach Schaltbefehl – Gerät schaltet noch, kein 2h-Lock")
+            else:
+                bis = (datetime.now() + timedelta(hours=2)).strftime("%H:%M")
+                status["manuell_sperre_bis"] = (datetime.now() + timedelta(hours=2)).isoformat()
+                status["modus_6kw"] = None
+                msg = f"🖐️ 6kW manuell ausgeschaltet – Automatik gesperrt bis {bis}"
+                print(msg);  meldungen.append(msg)
         else:
             print("ℹ️  6kW manuell EIN erkannt – Automatik laeuft weiter.")
         status["heizstab_6kw_ein"] = tydom_6kw
@@ -901,16 +920,20 @@ def main() -> None:
     if szenarien:
         print(f"--- TYDOM Schalten ({len(szenarien)} Szenario(en)) ---")
         tydom_ergebnis = tydom_ausfuehren(tydom_email, tydom_passwort, szenarien)
+        # Schaltzeit merken (verhindert falschen 2h-Lock im nächsten Zyklus)
+        status["letzte_schaltzeit"] = datetime.now().isoformat()
+
         if tydom_ergebnis:
-            # Bestaetigung aus TYDOM uebernehmen
-            status["heizstab_3kw_ein"] = tydom_ergebnis.get(
-                "3kw_ein", status.get("heizstab_3kw_ein", False))
-            status["heizstab_6kw_ein"] = tydom_ergebnis.get(
-                "6kw_ein", status.get("heizstab_6kw_ein", False))
-            print(f"✅ Bestaetigt: 3kW={'EIN' if status['heizstab_3kw_ein'] else 'AUS'}, "
-                  f"6kW={'EIN' if status['heizstab_6kw_ein'] else 'AUS'}")
+            # Bestätigung nur loggen – Status NICHT überschreiben.
+            # Das Relais braucht manchmal länger als die Wartezeit.
+            # Der nächste Zyklus verifiziert den echten Zustand über den manuellen-
+            # Eingriff-Vergleich (ohne 2h-Lock, weil letzte_schaltzeit gesetzt ist).
+            print(f"ℹ️  TYDOM nach Schalten: "
+                  f"3kW={'EIN' if tydom_ergebnis.get('3kw_ein') else 'AUS'}, "
+                  f"6kW={'EIN' if tydom_ergebnis.get('6kw_ein') else 'AUS'} "
+                  f"– Zustand wird nächsten Zyklus verifiziert")
         else:
-            print("⚠️  TYDOM Schalten fehlgeschlagen – Status bleibt optimistisch.")
+            print("⚠️  TYDOM Bestätigungslesung fehlgeschlagen – Status bleibt wie gesetzt.")
 
         # Benachrichtigungen senden
         for meldung in meldungen:
