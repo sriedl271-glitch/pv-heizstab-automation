@@ -22,7 +22,7 @@ jobs:
           python-version: "3.11"
 
       - name: Pakete installieren
-        run: pip install requests websockets
+        run: pip install requests websockets matplotlib numpy
 
       - name: Script ausführen
         env:
