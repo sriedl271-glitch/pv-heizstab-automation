@@ -81,8 +81,8 @@ MP_HAUS_HEUTE      = "13199"  # Daily Load Consumption (Wh)
 SAISON_6KW_START = (10, 1)
 SAISON_6KW_ENDE  = (5, 15)
 
-# Pending-Mindestwartezeit in Sekunden
-PENDING_SEKUNDEN = 180
+# Pending-Mindestwartezeit in Sekunden (4 Messungen à 5 Min = 20 Min Gesamtbestätigung)
+PENDING_SEKUNDEN = 780
 
 # Zeitzone: CEST = UTC+2 (April–Oktober)
 CEST_OFFSET = 2
@@ -731,48 +731,63 @@ def ist_pending_bestaetigt(pending_seit: str) -> bool:
 # SCHALTBEDINGUNGEN
 # ═══════════════════════════════════════════════════════════════════════════════
 def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
-    """Returns (soll_ein, modus, sofort)"""
+    """Returns (soll_ein, modus, sofort, einschalt_soc_min)
+    einschalt_soc_min: SOC-Schwelle die das EIN ausgelöst hat (wird als AUS-Schwelle gespeichert)
+    """
     soc         = daten["batterie_prozent"]
     pv          = daten["pv_leistung_w"]
     ueberschuss = daten["ueberschuss_w"]
     einspeisung = daten.get("einspeisung_w", 0)
 
     if einspeisung > 0 and soc >= 99 and pv >= 1000:
-        return True, "EINSPEISUNG_STOPP", True
+        return True, "EINSPEISUNG_STOPP", True, None
 
     if status.get("soc_abschaltung_3kw"):
         if soc >= 85 and laderate is not None and laderate > 0:
-            return True, "NORMAL", False
-        return False, None, False
+            return True, "NORMAL", False, 85
+        return False, None, False, None
 
     if soc >= 97 and pv >= 2000:
-        return True, "HOCHSPEICHER", False
+        return True, "HOCHSPEICHER", False, None
 
     if laderate is None or laderate <= 0:
-        return False, None, False
+        return False, None, False, None
+
+    # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 70% neu einschalten
+    if status.get("nach_ausschalt_sperre_3kw"):
+        if laderate > 0 and soc >= 70 and ueberschuss >= 3200:
+            return True, "NORMAL", False, 70
+        return False, None, False, None
 
     if laderate >= 20 and soc >= 45 and ueberschuss >= 3200:
-        return True, "NORMAL", False
+        return True, "NORMAL", False, 45
     if laderate >= 15 and soc >= 65 and ueberschuss >= 3200:
-        return True, "NORMAL", False
+        return True, "NORMAL", False, 65
     if laderate > 0  and soc >= 75 and ueberschuss >= 3200:
-        return True, "NORMAL", False
+        return True, "NORMAL", False, 75
 
-    return False, None, False
+    return False, None, False, None
 
 def pruefe_3kw_ausschalten(daten: dict, status: dict) -> bool:
-    soc         = daten["batterie_prozent"]
-    ueberschuss = daten["ueberschuss_w"]
-    netzbezug   = daten["netzbezug_w"]
-    pv          = daten["pv_leistung_w"]
-    modus       = status.get("modus_3kw", "NORMAL")
+    soc                = daten["batterie_prozent"]
+    ueberschuss        = daten["ueberschuss_w"]
+    netzbezug          = daten["netzbezug_w"]
+    pv                 = daten["pv_leistung_w"]
+    modus              = status.get("modus_3kw", "NORMAL")
+    einschalt_schwelle = status.get("einschalt_schwelle_3kw")  # 45, 65, 70, 75, 85 oder None
 
     if netzbezug > 300:
         return True
     if ueberschuss < 1000:
         return True
-    if soc < 70:
-        return True
+    # Dynamische AUS-Schwelle: entspricht der SOC-Schwelle die das EIN ausgelöst hat
+    if einschalt_schwelle is not None:
+        if soc < einschalt_schwelle:
+            return True
+    else:
+        # Allgemeiner SOC-Schutz wenn keine spezifische Schwelle hinterlegt (z.B. HOCHSPEICHER)
+        if soc < 75:
+            return True
     if modus == "HOCHSPEICHER" and (soc < 85 or pv < 1000):
         return True
     if modus == "EINSPEISUNG_STOPP" and (soc < 95 or pv < 1000):
@@ -781,9 +796,11 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> bool:
     return False
 
 def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
-    """Returns (soll_ein, modus, sofort)"""
+    """Returns (soll_ein, modus, sofort, einschalt_soc_min)
+    einschalt_soc_min: SOC-Schwelle die das EIN ausgelöst hat (wird als AUS-Schwelle gespeichert)
+    """
     if not ist_6kw_saison():
-        return False, None, False
+        return False, None, False, None
 
     soc         = daten["batterie_prozent"]
     pv          = daten["pv_leistung_w"]
@@ -791,37 +808,50 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     if status.get("soc_abschaltung_6kw"):
         if soc >= 99 and laderate is not None and laderate >= 0:
-            return True, "NORMAL", False
-        return False, None, False
+            return True, "NORMAL", False, 99
+        return False, None, False, None
 
     if soc >= 99 and pv >= 4500:
-        return True, "HOCHSPEICHER", False
+        return True, "HOCHSPEICHER", False, None
 
     if laderate is None or laderate <= 0:
-        return False, None, False
+        return False, None, False, None
+
+    # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 75% neu einschalten
+    if status.get("nach_ausschalt_sperre_6kw"):
+        if laderate > 0 and soc >= 75 and ueberschuss >= 6300:
+            return True, "NORMAL", False, 75
+        return False, None, False, None
 
     if laderate >= 20 and soc >= 75 and ueberschuss >= 6300:
-        return True, "NORMAL", False
+        return True, "NORMAL", False, 75
     if laderate >= 15 and soc >= 83 and ueberschuss >= 6300:
-        return True, "NORMAL", False
+        return True, "NORMAL", False, 83
     if laderate > 0  and soc >= 90 and ueberschuss >= 6300:
-        return True, "NORMAL", False
+        return True, "NORMAL", False, 90
 
-    return False, None, False
+    return False, None, False, None
 
 def pruefe_6kw_ausschalten(daten: dict, status: dict) -> bool:
-    soc         = daten["batterie_prozent"]
-    ueberschuss = daten["ueberschuss_w"]
-    netzbezug   = daten["netzbezug_w"]
-    pv          = daten["pv_leistung_w"]
-    modus       = status.get("modus_6kw", "NORMAL")
+    soc                = daten["batterie_prozent"]
+    ueberschuss        = daten["ueberschuss_w"]
+    netzbezug          = daten["netzbezug_w"]
+    pv                 = daten["pv_leistung_w"]
+    modus              = status.get("modus_6kw", "NORMAL")
+    einschalt_schwelle = status.get("einschalt_schwelle_6kw")  # 75, 83, 90, 99 oder None
 
     if netzbezug > 300:
         return True
     if ueberschuss < 4000:
         return True
-    if soc < 80:
-        return True
+    # Dynamische AUS-Schwelle: entspricht der SOC-Schwelle die das EIN ausgelöst hat
+    if einschalt_schwelle is not None:
+        if soc < einschalt_schwelle:
+            return True
+    else:
+        # Allgemeiner SOC-Schutz wenn keine spezifische Schwelle hinterlegt (z.B. HOCHSPEICHER)
+        if soc < 80:
+            return True
     if modus == "HOCHSPEICHER" and (soc < 93 or pv < 4500):
         return True
     return False
@@ -850,6 +880,12 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
         schaltungen = {"datum": heute_str,
                        "ein_3kw": 0, "aus_3kw": 0,
                        "ein_6kw": 0, "aus_6kw": 0}
+        # Tageswechsel: Einschalt-Sperren zurücksetzen (frischer Start neuer Tag)
+        status["nach_ausschalt_sperre_3kw"] = False
+        status["nach_ausschalt_sperre_6kw"] = False
+        status["einschalt_schwelle_3kw"]    = None
+        status["einschalt_schwelle_6kw"]    = None
+        print("ℹ️  Tageswechsel: Einschalt-Sperren zurückgesetzt")
     status["schaltungen_heute"] = schaltungen
 
     # ── Manuelle Eingriffe erkennen ──────────────────────────────────────────
@@ -920,6 +956,12 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 status["einschalt_pending_6kw"] = None
                 if soc < 80:
                     status["soc_abschaltung_6kw"] = True
+                # Dynamische Einschalt-Sperre: falls SOC unter die EIN-Schwelle gefallen
+                schwelle_6kw = status.get("einschalt_schwelle_6kw")
+                if schwelle_6kw is not None and soc < schwelle_6kw:
+                    status["nach_ausschalt_sperre_6kw"] = True
+                    print(f"ℹ️  6kW Einschalt-Sperre aktiv: nächstes EIN erst ab 75% SOC")
+                status["einschalt_schwelle_6kw"] = None
                 status["modus_6kw"] = None
                 schaltungen["aus_6kw"] += 1
                 ein_6kw = False
@@ -945,8 +987,14 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 status["heizstab_3kw_ein"]      = False
                 status["ausschalt_pending_3kw"] = None
                 status["einschalt_pending_3kw"] = None
-                if soc < 70:
+                if soc < 75:
                     status["soc_abschaltung_3kw"] = True
+                # Dynamische Einschalt-Sperre: falls SOC unter die EIN-Schwelle gefallen
+                schwelle_3kw = status.get("einschalt_schwelle_3kw")
+                if schwelle_3kw is not None and soc < schwelle_3kw:
+                    status["nach_ausschalt_sperre_3kw"] = True
+                    print(f"ℹ️  3kW Einschalt-Sperre aktiv: nächstes EIN erst ab 70% SOC")
+                status["einschalt_schwelle_3kw"] = None
                 status["modus_3kw"] = None
                 schaltungen["aus_3kw"] += 1
                 ein_3kw = False
@@ -960,16 +1008,18 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     # ── 3kW EINSCHALTEN ──────────────────────────────────────────────────────
     if not ein_3kw:
-        soll_ein, modus, sofort = pruefe_3kw_einschalten(daten, status, laderate)
+        soll_ein, modus, sofort, einschalt_soc_min_3kw = pruefe_3kw_einschalten(daten, status, laderate)
         if soll_ein:
             if sofort:
                 print("🟢 3kW sofort EIN (Einspeisung-Stopp)")
                 szenarien.append(SCN_EIN_3KW)
                 erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
-                status["heizstab_3kw_ein"]      = True
-                status["modus_3kw"]             = modus
-                status["einschalt_pending_3kw"] = None
-                status["soc_abschaltung_3kw"]   = False
+                status["heizstab_3kw_ein"]          = True
+                status["modus_3kw"]                 = modus
+                status["einschalt_pending_3kw"]     = None
+                status["soc_abschaltung_3kw"]       = False
+                status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
+                status["nach_ausschalt_sperre_3kw"] = False
                 schaltungen["ein_3kw"] += 1
                 meldungen.append(
                     f"🟢 3kW EIN (Einspeisung-Stopp)\n"
@@ -983,10 +1033,12 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                     print(f"🟢 3kW wird EINGESCHALTET ({modus})")
                     szenarien.append(SCN_EIN_3KW)
                     erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
-                    status["heizstab_3kw_ein"]      = True
-                    status["modus_3kw"]             = modus
-                    status["einschalt_pending_3kw"] = None
-                    status["soc_abschaltung_3kw"]   = False
+                    status["heizstab_3kw_ein"]          = True
+                    status["modus_3kw"]                 = modus
+                    status["einschalt_pending_3kw"]     = None
+                    status["soc_abschaltung_3kw"]       = False
+                    status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
+                    status["nach_ausschalt_sperre_3kw"] = False
                     schaltungen["ein_3kw"] += 1
                     meldungen.append(
                         f"🟢 3kW EIN ({modus})\n"
@@ -998,7 +1050,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     # ── 6kW EINSCHALTEN ──────────────────────────────────────────────────────
     if not ein_6kw:
-        soll_ein, modus, sofort = pruefe_6kw_einschalten(daten, status, laderate)
+        soll_ein, modus, sofort, einschalt_soc_min_6kw = pruefe_6kw_einschalten(daten, status, laderate)
         if soll_ein:
             if not status.get("einschalt_pending_6kw"):
                 status["einschalt_pending_6kw"] = now_str
@@ -1007,10 +1059,12 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print(f"🟢 6kW wird EINGESCHALTET ({modus})")
                 szenarien.append(SCN_EIN_6KW)
                 erfasse_schaltpunkt(status, "6kw", "EIN", soc, pv_w, modus)
-                status["heizstab_6kw_ein"]      = True
-                status["modus_6kw"]             = modus
-                status["einschalt_pending_6kw"] = None
-                status["soc_abschaltung_6kw"]   = False
+                status["heizstab_6kw_ein"]          = True
+                status["modus_6kw"]                 = modus
+                status["einschalt_pending_6kw"]     = None
+                status["soc_abschaltung_6kw"]       = False
+                status["einschalt_schwelle_6kw"]    = einschalt_soc_min_6kw
+                status["nach_ausschalt_sperre_6kw"] = False
                 schaltungen["ein_6kw"] += 1
                 meldungen.append(
                     f"🟢 6kW EIN ({modus})\n"
