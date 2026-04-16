@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 97,
-      "zeit": "2026-04-16T13:55:31.593286"
-    },
-    {
       "soc": 98,
       "zeit": "2026-04-16T14:00:47.198554"
     },
@@ -47,22 +43,26 @@
     {
       "soc": 97,
       "zeit": "2026-04-16T14:50:43.411278"
+    },
+    {
+      "soc": 97,
+      "zeit": "2026-04-16T14:55:39.733644"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-16",
     "ein_3kw": 4,
-    "aus_3kw": 3,
+    "aus_3kw": 4,
     "ein_6kw": 1,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "EINSPEISUNG_STOPP",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-16T14:26:17.848104",
-  "letzte_aktualisierung": "2026-04-16T14:50:54.228111",
-  "ausschalt_pending_3kw": "2026-04-16T14:40:52.180941",
+  "letzte_schaltzeit": "2026-04-16T14:56:21.288938",
+  "letzte_aktualisierung": "2026-04-16T14:56:23.099459",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-16",
   "tages_verlauf": [
     {
@@ -2352,6 +2352,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 953,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "16:55",
+      "soc": 97,
+      "pv_w": 1947,
+      "haus_w": 3602,
+      "einspeisung_w": 0,
+      "netzbezug_w": 13,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 1642,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -2418,15 +2429,23 @@
       "soc": 100,
       "pv_w": 9101,
       "modus": "HOCHSPEICHER"
+    },
+    {
+      "zeit": "16:55",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 97,
+      "pv_w": 1947,
+      "modus": null
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 30.5,
+    "pv_kwh": 30.7,
     "einspeisung_kwh": 5.6,
     "netzbezug_kwh": 0.5,
     "bat_laden_kwh": 12.9,
-    "bat_entladen_kwh": 6.0,
-    "haus_kwh": 18.5
+    "bat_entladen_kwh": 6.2,
+    "haus_kwh": 18.9
   },
   "morgenreport_datum": "2026-04-16",
   "abendreport_datum": "2026-04-15",
