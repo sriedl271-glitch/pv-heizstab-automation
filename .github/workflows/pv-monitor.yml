@@ -2,8 +2,6 @@ name: PV Heizstab Monitor
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/5 * * * *"
 
 permissions:
   contents: write
@@ -46,4 +44,5 @@ jobs:
         run: |
           git add status.json
           git diff --cached --quiet || git commit -m "Statusdatei automatisch aktualisiert"
+          git pull --rebase origin main
           git push
