@@ -92,6 +92,11 @@ MORGENREPORT_UTC_STUNDE = 5
 ABENDREPORT_UTC_STUNDE  = 19
 REPORT_FENSTER_MIN      = 10
 
+# Betriebszeitfenster: System aktiv 06:00 – 22:00 Uhr CEST
+BETRIEB_START_STUNDE  = 6   # 06:00 Uhr CEST
+BETRIEB_ENDE_STUNDE   = 22  # 22:00 Uhr CEST
+ABSCHALT_FENSTER_MIN  = 10  # Abschalt-Prüfung nur in den ersten 10 Min nach 22:00
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATUS.JSON
@@ -725,6 +730,88 @@ def ist_pending_bestaetigt(pending_seit: str) -> bool:
         return (datetime.utcnow() - datetime.fromisoformat(pending_seit)).total_seconds() >= PENDING_SEKUNDEN
     except Exception:
         return False
+
+def ist_betriebszeit() -> bool:
+    """Prüft ob aktuell Betriebszeit (06:00 – 22:00 Uhr CEST) ist."""
+    return BETRIEB_START_STUNDE <= lokal_jetzt().hour < BETRIEB_ENDE_STUNDE
+
+def ist_abschaltzeitfenster() -> bool:
+    """Erste 10 Minuten nach 22:00 Uhr – Abschalt-Prüfung wird durchgeführt."""
+    lokal = lokal_jetzt()
+    return lokal.hour == BETRIEB_ENDE_STUNDE and lokal.minute < ABSCHALT_FENSTER_MIN
+
+def fuehre_abschalt_pruefung_durch(tydom_email: str, tydom_passwort: str, status: dict) -> None:
+    """
+    Abschalt-Prüfung um 22:00 Uhr (Betriebsende):
+    Check 1: TYDOM Zustand lesen – falls EIN → Ausschalten + Pushover + E-Mail
+    3 Minuten warten
+    Check 2: Nochmals prüfen – falls immer noch EIN → Alarm + Notfall-Ausschalt-Versuch
+    """
+    print("🌙 Abschalt-Prüfung 22:00 Uhr – Check 1")
+    zustand1 = tydom_ausfuehren(tydom_email, tydom_passwort)
+    if zustand1 is None:
+        print("❌ TYDOM nicht erreichbar – Abschalt-Prüfung fehlgeschlagen")
+        msg = "⚠️ TYDOM nicht erreichbar um 22:00 Uhr – bitte Heizstäbe manuell prüfen!"
+        benachrichtige("⚠️ PV Heizstab – Abschalt-Prüfung", msg, prioritaet=1)
+        sende_email("⚠️ PV Heizstab – Abschalt-Prüfung fehlgeschlagen", msg)
+        return
+
+    ein_3kw = zustand1.get("3kw_ein", False)
+    ein_6kw = zustand1.get("6kw_ein", False)
+    szenarien_aus = []
+    teile = []
+
+    if ein_3kw:
+        szenarien_aus.append(SCN_AUS_3KW)
+        teile.append("3kW war EIN → wird ausgeschaltet")
+        status["heizstab_3kw_ein"]       = False
+        status["einschalt_schwelle_3kw"] = None
+    if ein_6kw:
+        szenarien_aus.append(SCN_AUS_6KW)
+        teile.append("6kW war EIN → wird ausgeschaltet")
+        status["heizstab_6kw_ein"]       = False
+        status["einschalt_schwelle_6kw"] = None
+
+    if szenarien_aus:
+        tydom_ausfuehren(tydom_email, tydom_passwort, szenarien_aus)
+        msg = "🌙 Abschalt-Prüfung 22:00 Uhr:\n" + "\n".join(teile)
+        print(msg)
+        benachrichtige("PV Heizstab – Abschaltung 22:00 Uhr", msg, prioritaet=1)
+        sende_email("PV Heizstab – Abschaltung 22:00 Uhr", msg)
+    else:
+        print("✅ Abschalt-Prüfung Check 1: Beide Heizstäbe AUS – OK")
+
+    # 3 Minuten warten vor Check 2
+    print("⏳ Abschalt-Prüfung: 3 Minuten warten vor Check 2 ...")
+    time.sleep(180)
+
+    print("🌙 Abschalt-Prüfung 22:00 Uhr – Check 2")
+    zustand2 = tydom_ausfuehren(tydom_email, tydom_passwort)
+    if zustand2 is None:
+        print("❌ TYDOM Check 2 nicht erreichbar")
+        msg = "⚠️ TYDOM bei Abschalt-Check 2 nicht erreichbar – bitte manuell prüfen!"
+        benachrichtige("⚠️ PV Heizstab – Check 2 fehlgeschlagen", msg, prioritaet=1)
+        sende_email("⚠️ PV Heizstab – Abschalt-Check 2 fehlgeschlagen", msg)
+        return
+
+    alarm_teile = []
+    notfall_szenarien = []
+    if zustand2.get("3kw_ein", False):
+        alarm_teile.append("3kW ist nach Check 2 immer noch EIN!")
+        notfall_szenarien.append(SCN_AUS_3KW)
+    if zustand2.get("6kw_ein", False):
+        alarm_teile.append("6kW ist nach Check 2 immer noch EIN!")
+        notfall_szenarien.append(SCN_AUS_6KW)
+
+    if alarm_teile:
+        alarm_msg = "⚠️ ACHTUNG – Abschalt-Prüfung 22:00 Uhr:\n" + "\n".join(alarm_teile)
+        print(alarm_msg)
+        benachrichtige("⚠️ PV Heizstab – ALARM Abschaltung", alarm_msg, prioritaet=1)
+        sende_email("⚠️ PV Heizstab – Heizstab nach 22:00 immer noch EIN!", alarm_msg)
+        # Letzter Notfall-Versuch
+        tydom_ausfuehren(tydom_email, tydom_passwort, notfall_szenarien)
+    else:
+        print("✅ Abschalt-Prüfung Check 2: Beide Heizstäbe AUS – OK")
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1413,7 +1500,9 @@ def erstelle_morgenreport_text(status: dict) -> tuple:
     if ist_pausiert:
         status_zeile = f"⏸️  AUTOMATION PAUSIERT\n   {pause_info}"
     else:
-        status_zeile = "✅  AUTOMATION LÄUFT NORMAL"
+        status_zeile = (f"✅  AUTOMATION LÄUFT NORMAL\n"
+                        f"   Betriebszeit: {BETRIEB_START_STUNDE:02d}:00 – "
+                        f"{BETRIEB_ENDE_STUNDE:02d}:00 Uhr (aktiv)")
 
     text = f"""PV Heizstab – Tages-Status  {datum_str}
 
@@ -1578,12 +1667,34 @@ def verarbeite_tagesberichte(status: dict) -> None:
 # ═══════════════════════════════════════════════════════════════════════════════
 def main() -> None:
     print("=== PV MONITOR START ===")
-    print(f"Zeit: {lokal_jetzt().strftime('%d.%m.%Y %H:%M:%S')} (CEST)")
+    lokal = lokal_jetzt()
+    print(f"Zeit: {lokal.strftime('%d.%m.%Y %H:%M:%S')} (CEST)")
 
     status = lade_status()
 
     # Neuer-Tag-Reset (Tagesdaten, Schaltpunkte)
     reset_wenn_neuer_tag(status)
+
+    # ── Betriebszeit prüfen (06:00 – 22:00 Uhr CEST) ────────────────────────
+    if not ist_betriebszeit():
+        heute_str = lokal.strftime("%Y-%m-%d")
+        if ist_abschaltzeitfenster() and status.get("abschalt_pruefung_datum") != heute_str:
+            # Einmalig pro Tag: Abschalt-Prüfung beim ersten Lauf nach 22:00 Uhr
+            print("🌙 Betriebsende 22:00 Uhr – Abschalt-Prüfung wird durchgeführt")
+            status["abschalt_pruefung_datum"] = heute_str
+            tydom_email    = os.environ.get("TYDOM_EMAIL")
+            tydom_passwort = os.environ.get("TYDOM_PASSWORD")
+            if tydom_email and tydom_passwort:
+                fuehre_abschalt_pruefung_durch(tydom_email, tydom_passwort, status)
+            else:
+                print("❌ TYDOM Zugangsdaten fehlen – Abschalt-Prüfung nicht möglich")
+            speichere_status(status)
+        else:
+            print(f"⏸️  Außerhalb Betriebszeit "
+                  f"({lokal.hour:02d}:{lokal.minute:02d} Uhr CEST, "
+                  f"aktiv: {BETRIEB_START_STUNDE:02d}:00–{BETRIEB_ENDE_STUNDE:02d}:00) – Exit")
+        print("=== PV MONITOR ENDE (außerhalb Betriebszeit) ===")
+        return
 
     # iSolarCloud Daten holen
     app_key       = os.environ.get("ISOLARCLOUD_APP_KEY")
