@@ -877,7 +877,8 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     return False, None, False, None
 
-def pruefe_3kw_ausschalten(daten: dict, status: dict) -> bool:
+def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
+    """Returns (soll_aus: bool, grund: str)"""
     soc                = daten["batterie_prozent"]
     ueberschuss        = daten["ueberschuss_w"]
     netzbezug          = daten["netzbezug_w"]
@@ -886,23 +887,23 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> bool:
     einschalt_schwelle = status.get("einschalt_schwelle_3kw")  # 45, 65, 70, 75, 85 oder None
 
     if netzbezug > 300:
-        return True
+        return True, "Netz"
     if ueberschuss < 1000:
-        return True
+        return True, "Übersch."
     # Dynamische AUS-Schwelle: entspricht der SOC-Schwelle die das EIN ausgelöst hat
     if einschalt_schwelle is not None:
         if soc < einschalt_schwelle:
-            return True
+            return True, f"SOC<{einschalt_schwelle}%"
     else:
         # Allgemeiner SOC-Schutz wenn keine spezifische Schwelle hinterlegt (z.B. HOCHSPEICHER)
         if soc < 75:
-            return True
+            return True, "SOC<75%"
     if modus == "HOCHSPEICHER" and (soc < 85 or pv < 1000):
-        return True
+        return True, "Hochsp."
     if modus == "EINSPEISUNG_STOPP" and (soc < 95 or pv < 1000):
         status["modus_3kw"] = "NORMAL"
-        return False
-    return False
+        return False, ""
+    return False, ""
 
 def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
     """Returns (soll_ein, modus, sofort, einschalt_soc_min)
@@ -941,7 +942,8 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     return False, None, False, None
 
-def pruefe_6kw_ausschalten(daten: dict, status: dict) -> bool:
+def pruefe_6kw_ausschalten(daten: dict, status: dict) -> tuple:
+    """Returns (soll_aus: bool, grund: str)"""
     soc                = daten["batterie_prozent"]
     ueberschuss        = daten["ueberschuss_w"]
     netzbezug          = daten["netzbezug_w"]
@@ -950,20 +952,20 @@ def pruefe_6kw_ausschalten(daten: dict, status: dict) -> bool:
     einschalt_schwelle = status.get("einschalt_schwelle_6kw")  # 75, 83, 90, 99 oder None
 
     if netzbezug > 300:
-        return True
+        return True, "Netz"
     if ueberschuss < 4000:
-        return True
+        return True, "Übersch."
     # Dynamische AUS-Schwelle: entspricht der SOC-Schwelle die das EIN ausgelöst hat
     if einschalt_schwelle is not None:
         if soc < einschalt_schwelle:
-            return True
+            return True, f"SOC<{einschalt_schwelle}%"
     else:
         # Allgemeiner SOC-Schutz wenn keine spezifische Schwelle hinterlegt (z.B. HOCHSPEICHER)
         if soc < 80:
-            return True
+            return True, "SOC<80%"
     if modus == "HOCHSPEICHER" and (soc < 93 or pv < 4500):
-        return True
-    return False
+        return True, "Hochsp."
+    return False, ""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -1053,15 +1055,15 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     # ── 6kW AUSSCHALTEN ──────────────────────────────────────────────────────
     if ein_6kw:
-        soll_aus = pruefe_6kw_ausschalten(daten, status)
+        soll_aus, aus_grund_6kw = pruefe_6kw_ausschalten(daten, status)
         if soll_aus:
             if not status.get("ausschalt_pending_6kw"):
                 status["ausschalt_pending_6kw"] = now_str
-                print("⏳ 6kW AUS: Pending")
+                print(f"⏳ 6kW AUS ({aus_grund_6kw}): Pending")
             elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), get_aus_pending_sekunden()):
                 print("🔴 6kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_6KW)
-                erfasse_schaltpunkt(status, "6kw", "AUS", soc, pv_w)
+                erfasse_schaltpunkt(status, "6kw", "AUS", soc, pv_w, aus_grund_6kw)
                 status["heizstab_6kw_ein"]      = False
                 status["ausschalt_pending_6kw"] = None
                 status["einschalt_pending_6kw"] = None
@@ -1086,15 +1088,15 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     # ── 3kW AUSSCHALTEN ──────────────────────────────────────────────────────
     if ein_3kw:
-        soll_aus = pruefe_3kw_ausschalten(daten, status)
+        soll_aus, aus_grund_3kw = pruefe_3kw_ausschalten(daten, status)
         if soll_aus:
             if not status.get("ausschalt_pending_3kw"):
                 status["ausschalt_pending_3kw"] = now_str
-                print("⏳ 3kW AUS: Pending")
+                print(f"⏳ 3kW AUS ({aus_grund_3kw}): Pending")
             elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), get_aus_pending_sekunden()):
                 print("🔴 3kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_3KW)
-                erfasse_schaltpunkt(status, "3kw", "AUS", soc, pv_w)
+                erfasse_schaltpunkt(status, "3kw", "AUS", soc, pv_w, aus_grund_3kw)
                 status["heizstab_3kw_ein"]      = False
                 status["ausschalt_pending_3kw"] = None
                 status["einschalt_pending_3kw"] = None
@@ -1269,12 +1271,12 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
     # SOC-Achse: 0% auf Hoehe der 0W-Linie
     s_min = 100 * y_min / y_max
 
-    DARK_GREEN = "#1a6e1a"
-    DARK_BLUE  = "#003399"
-    COL_PV     = "#FFA500"
-    COL_BAT    = "#4CAF50"
-    COL_GRID   = "#5B9BD5"
-    COL_CONS   = "#b5a800"
+    DARK_GREEN  = "#1a6e1a"
+    DARK_ORANGE = "#cc5500"   # 6kW – dunkles Orange (unterscheidet sich von Rot der Notreserve)
+    COL_PV      = "#FFA500"
+    COL_BAT     = "#4CAF50"
+    COL_GRID    = "#5B9BD5"
+    COL_CONS    = "#b5a800"
 
     tick_idx    = list(range(0, 1441, 120))
     tick_labels = [f"{h:02d}:00" for h in range(0, 25, 2)]
@@ -1315,15 +1317,15 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
 
         axR.plot(x_min, soc, color=DARK_GREEN, lw=3.0, zorder=6)
 
-    axR.axhline(30,  color="red",      ls="--", lw=1.5, alpha=0.8, zorder=5)
-    axR.axhline(70,  color=DARK_GREEN, ls=":",  lw=1.0, alpha=0.5, zorder=5)
-    axR.axhline(80,  color=DARK_BLUE,  ls=":",  lw=1.0, alpha=0.5, zorder=5)
-    axR.axhline(100, color="#aaaaaa",  ls=":",  lw=0.8, alpha=0.4, zorder=5)
+    axR.axhline(30,  color="red",        ls="--", lw=1.5, alpha=0.8, zorder=5)
+    axR.axhline(75,  color=DARK_GREEN,   ls=":",  lw=1.0, alpha=0.5, zorder=5)
+    axR.axhline(80,  color=DARK_ORANGE,  ls=":",  lw=1.0, alpha=0.5, zorder=5)
+    axR.axhline(100, color="#aaaaaa",    ls=":",  lw=0.8, alpha=0.4, zorder=5)
 
-    for y, txt, col in [(30, "30% Notreserve", "red"),
-                        (70, "70% (3kW aus)",   DARK_GREEN),
-                        (80, "80% (6kW aus)",   DARK_BLUE),
-                        (100,"100%",             "#888888")]:
+    for y, txt, col in [(30, "30% Notreserve",    "red"),
+                        (75, "75% (3kW AUS-Schw.)", DARK_GREEN),
+                        (80, "80% (6kW AUS-Schw.)", DARK_ORANGE),
+                        (100,"100%",                 "#888888")]:
         axR.text(1440 + 10, y, txt, fontsize=7.5, color=col,
                  va="center", ha="left", clip_on=False)
 
@@ -1338,7 +1340,7 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
     for sp in schaltpunkte:
         t    = zeit_zu_min(sp["zeit"])
         s    = sp.get("soc", finde_soc_bei_zeit(sp["zeit"]))
-        col  = DARK_GREEN if sp["geraet"] == "3kw" else DARK_BLUE
+        col  = DARK_GREEN if sp["geraet"] == "3kw" else DARK_ORANGE
         kw   = "3kW" if sp["geraet"] == "3kw" else "6kW"
         mark = "o" if sp["aktion"] == "EIN" else "x"
         lw   = 1.2 if sp["aktion"] == "EIN" else 3.0
@@ -1376,22 +1378,22 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
              ha="center", fontsize=8, color="#666666", style="italic")
 
     legend_handles = [
-        mpatches.Patch(color=COL_PV,   alpha=0.6, label="PV-Ertrag (W)"),
-        mlines.Line2D ([],[],           color=COL_CONS, lw=2.2, label="Gesamtverbrauch (W)"),
-        mpatches.Patch(color=COL_BAT,  alpha=0.6, label="Batterie (+ entladen / – laden)"),
-        mpatches.Patch(color=COL_GRID, alpha=0.6, label="Netz (+ Bezug / – Einspeisung)"),
-        mlines.Line2D ([],[],           color=DARK_GREEN, lw=2.8, label="Batterieladezustand (%)"),
-        mlines.Line2D ([],[],           color=DARK_GREEN, marker="o", ms=8, ls="None",
+        mpatches.Patch(color=COL_PV,    alpha=0.6, label="PV-Ertrag (W)"),
+        mlines.Line2D ([],[],            color=COL_CONS,    lw=2.2,  label="Gesamtverbrauch (W)"),
+        mpatches.Patch(color=COL_BAT,   alpha=0.6, label="Batterie (+ entladen / – laden)"),
+        mpatches.Patch(color=COL_GRID,  alpha=0.6, label="Netz (+ Bezug / – Einspeisung)"),
+        mlines.Line2D ([],[],            color=DARK_GREEN,  lw=2.8,  label="Batterieladezustand (%)"),
+        mlines.Line2D ([],[],            color=DARK_GREEN,  marker="o", ms=8, ls="None",
                        markeredgecolor="white", label="3kW Einschalten ●"),
-        mlines.Line2D ([],[],           color=DARK_GREEN, marker="x", ms=9, ls="None",
-                       markeredgewidth=2.8, label="3kW Ausschalten ✕"),
-        mlines.Line2D ([],[],           color=DARK_BLUE,  marker="o", ms=8, ls="None",
+        mlines.Line2D ([],[],            color=DARK_GREEN,  marker="x", ms=9, ls="None",
+                       markeredgewidth=2.8,     label="3kW Ausschalten ✕"),
+        mlines.Line2D ([],[],            color=DARK_ORANGE, marker="o", ms=8, ls="None",
                        markeredgecolor="white", label="6kW Einschalten ●"),
-        mlines.Line2D ([],[],           color=DARK_BLUE,  marker="x", ms=9, ls="None",
-                       markeredgewidth=2.8, label="6kW Ausschalten ✕"),
+        mlines.Line2D ([],[],            color=DARK_ORANGE, marker="x", ms=9, ls="None",
+                       markeredgewidth=2.8,     label="6kW Ausschalten ✕"),
     ]
     ax1.legend(handles=legend_handles, loc="upper left", fontsize=8.5,
-               ncol=3, framealpha=0.92, edgecolor="#cccccc")
+               ncol=2, framealpha=0.92, edgecolor="#cccccc")
 
     # ── 3kW Heizstab Status ───────────────────────────────────────────────────
     ax2 = fig.add_subplot(gs[1])
@@ -1402,19 +1404,21 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
     ein3_punkte = [p for p in schaltpunkte if p["geraet"]=="3kw" and p["aktion"]=="EIN"]
     aus3_punkte = [p for p in schaltpunkte if p["geraet"]=="3kw" and p["aktion"]=="AUS"]
     for p in ein3_punkte:
-        t = zeit_zu_min(p["zeit"])
+        t      = zeit_zu_min(p["zeit"])
+        signal = p.get("modus") or ""
         ax2.scatter([t], [1], color=DARK_GREEN, s=100, zorder=10,
                     marker="o", edgecolors="white", linewidths=1.2)
-        ax2.text(t, 1.18, f"EIN\n{p['zeit']}", ha="center", fontsize=8.5,
-                 color=DARK_GREEN, fontweight="bold")
+        ax2.text(t, 1.18, f"EIN  {p['zeit']}\n({signal})" if signal else f"EIN  {p['zeit']}",
+                 ha="center", fontsize=8, color=DARK_GREEN, fontweight="bold")
     for p in aus3_punkte:
-        t = zeit_zu_min(p["zeit"])
+        t      = zeit_zu_min(p["zeit"])
+        signal = p.get("modus") or ""
         ax2.scatter([t], [0], color=DARK_GREEN, s=120, zorder=10,
                     marker="x", linewidths=2.8)
-        ax2.text(t, -0.3, f"AUS\n{p['zeit']}", ha="center", fontsize=8.5,
-                 color=DARK_GREEN, fontweight="bold")
+        ax2.text(t, -0.32, f"AUS  {p['zeit']}\n({signal})" if signal else f"AUS  {p['zeit']}",
+                 ha="center", fontsize=8, color=DARK_GREEN, fontweight="bold")
 
-    ax2.set_xlim(0, 1440); ax2.set_ylim(-0.5, 1.8)
+    ax2.set_xlim(0, 1440); ax2.set_ylim(-0.65, 1.9)
     ax2.set_yticks([0, 1])
     ax2.set_yticklabels(["AUS", "EIN"], fontsize=9, color=DARK_GREEN)
     ax2.set_xticks(tick_idx); ax2.set_xticklabels(tick_labels, fontsize=9)
@@ -1426,68 +1430,36 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
     # ── 6kW Heizstab Status ───────────────────────────────────────────────────
     ax3 = fig.add_subplot(gs[2])
     ax3.set_facecolor("#ffffff")
-    ax3.step(x6, y6, where="post", color=DARK_BLUE, lw=2.2)
-    ax3.fill_between(x6, 0, y6, step="post", alpha=0.22, color=DARK_BLUE)
+    ax3.step(x6, y6, where="post", color=DARK_ORANGE, lw=2.2)
+    ax3.fill_between(x6, 0, y6, step="post", alpha=0.22, color=DARK_ORANGE)
 
     ein6_punkte = [p for p in schaltpunkte if p["geraet"]=="6kw" and p["aktion"]=="EIN"]
     aus6_punkte = [p for p in schaltpunkte if p["geraet"]=="6kw" and p["aktion"]=="AUS"]
     for p in ein6_punkte:
-        t = zeit_zu_min(p["zeit"])
-        ax3.scatter([t], [1], color=DARK_BLUE, s=100, zorder=10,
+        t      = zeit_zu_min(p["zeit"])
+        signal = p.get("modus") or ""
+        ax3.scatter([t], [1], color=DARK_ORANGE, s=100, zorder=10,
                     marker="o", edgecolors="white", linewidths=1.2)
-        ax3.text(t, 1.18, f"EIN\n{p['zeit']}", ha="center", fontsize=8.5,
-                 color=DARK_BLUE, fontweight="bold")
+        ax3.text(t, 1.18, f"EIN  {p['zeit']}\n({signal})" if signal else f"EIN  {p['zeit']}",
+                 ha="center", fontsize=8, color=DARK_ORANGE, fontweight="bold")
     for p in aus6_punkte:
-        t = zeit_zu_min(p["zeit"])
-        ax3.scatter([t], [0], color=DARK_BLUE, s=120, zorder=10,
+        t      = zeit_zu_min(p["zeit"])
+        signal = p.get("modus") or ""
+        ax3.scatter([t], [0], color=DARK_ORANGE, s=120, zorder=10,
                     marker="x", linewidths=2.8)
-        ax3.text(t, -0.3, f"AUS\n{p['zeit']}", ha="center", fontsize=8.5,
-                 color=DARK_BLUE, fontweight="bold")
+        ax3.text(t, -0.32, f"AUS  {p['zeit']}\n({signal})" if signal else f"AUS  {p['zeit']}",
+                 ha="center", fontsize=8, color=DARK_ORANGE, fontweight="bold")
 
-    ax3.set_xlim(0, 1440); ax3.set_ylim(-0.5, 1.8)
+    ax3.set_xlim(0, 1440); ax3.set_ylim(-0.65, 1.9)
     ax3.set_yticks([0, 1])
-    ax3.set_yticklabels(["AUS", "EIN"], fontsize=9, color=DARK_BLUE)
+    ax3.set_yticklabels(["AUS", "EIN"], fontsize=9, color=DARK_ORANGE)
     ax3.set_xticks(tick_idx); ax3.set_xticklabels(tick_labels, fontsize=9)
     ax3.set_title("③ 6kW Heizstab (Fußbodenheizung) – Schaltzustände",
-                  fontsize=11, fontweight="bold", color=DARK_BLUE)
+                  fontsize=11, fontweight="bold", color=DARK_ORANGE)
     ax3.grid(True, alpha=0.2, linestyle="--")
     ax3.axhline(0, color="#aaaaaa", lw=0.8)
 
-    # Schaltpunkte-Tabelle unterhalb des Diagramms
-    sp_sorted = sorted(schaltpunkte, key=lambda x: x["zeit"])
-    if sp_sorted:
-        col_green = "#1a6e1a"
-        col_blue  = "#003399"
-        eintraege = []
-        for sp in sp_sorted:
-            kw  = "3kW" if sp["geraet"] == "3kw" else "6kW"
-            col = col_green if sp["geraet"] == "3kw" else col_blue
-            sym = "●" if sp["aktion"] == "EIN" else "✕"
-            eintraege.append((f"{sp['zeit']}  {sym} {kw} {sp['aktion']}  SOC:{sp['soc']}%", col))
-        # Mehrzeilig wenn viele Einträge
-        zeilen = []
-        zeile_parts = []
-        zeile_cols  = []
-        for txt, col in eintraege:
-            zeile_parts.append(txt)
-            zeile_cols.append(col)
-        # Als eine Zeile ausgeben (genug Platz durch bbox_inches="tight")
-        x_pos = 0.05
-        y_pos = 0.008
-        fig.text(0.02, y_pos, "Schaltpunkte:", fontsize=9, fontweight="bold",
-                 color="#333333", transform=fig.transFigure)
-        x_cursor = 0.18
-        for txt, col in eintraege:
-            fig.text(x_cursor, y_pos, txt, fontsize=9, color=col,
-                     transform=fig.transFigure)
-            x_cursor += len(txt) * 0.0065
-            if x_cursor > 0.85:
-                y_pos -= 0.018
-                x_cursor = 0.18
-    else:
-        fig.text(0.5, 0.008, "Heute keine Schaltungen", ha="center",
-                 fontsize=9, color="#888888", style="italic",
-                 transform=fig.transFigure)
+    # Schaltpunkte sind direkt an den Markern in ax2 (3kW) und ax3 (6kW) annotiert
 
     buf = io.BytesIO()
     plt.savefig(buf, dpi=150, bbox_inches="tight", facecolor="#f4f4f4")
