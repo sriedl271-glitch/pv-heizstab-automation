@@ -968,12 +968,14 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
         schaltungen = {"datum": heute_str,
                        "ein_3kw": 0, "aus_3kw": 0,
                        "ein_6kw": 0, "aus_6kw": 0}
-        # Tageswechsel: Einschalt-Sperren zurücksetzen (frischer Start neuer Tag)
+        # Tageswechsel: alle Sperren zurücksetzen (frischer Start neuer Tag)
         status["nach_ausschalt_sperre_3kw"] = False
         status["nach_ausschalt_sperre_6kw"] = False
         status["einschalt_schwelle_3kw"]    = None
         status["einschalt_schwelle_6kw"]    = None
-        print("ℹ️  Tageswechsel: Einschalt-Sperren zurückgesetzt")
+        status["soc_abschaltung_3kw"]       = False
+        status["soc_abschaltung_6kw"]       = False
+        print("ℹ️  Tageswechsel: alle Einschalt-Sperren zurückgesetzt")
     status["schaltungen_heute"] = schaltungen
 
     # ── Manuelle Eingriffe erkennen ──────────────────────────────────────────
