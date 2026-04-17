@@ -167,8 +167,13 @@ def sende_email(betreff: str, inhalt: str) -> None:
     except Exception as e:
         print(f"❌ E-Mail Fehler: {e}")
 
-def sende_email_mit_anhang(betreff: str, inhalt: str, png_bytes: bytes = None) -> None:
-    """Sendet E-Mail mit optionalem PNG-Anhang (Tagesdiagramm)."""
+def sende_email_mit_anhang(betreff: str, inhalt: str,
+                           png_bytes: bytes = None,
+                           png_bytes_2: bytes = None) -> None:
+    """Sendet E-Mail mit bis zu zwei optionalen PNG-Anhängen.
+    png_bytes   = Tagesdiagramm (aktueller Tag)
+    png_bytes_2 = Regelübersichts-Diagramm
+    """
     passwort = os.environ.get("GMAIL_APP_PASSWORD")
     adresse  = "sriedl271@gmail.com"
     if not passwort:
@@ -183,6 +188,10 @@ def sende_email_mit_anhang(betreff: str, inhalt: str, png_bytes: bytes = None) -
         img = MIMEImage(png_bytes, name="tagesdiagramm.png")
         img.add_header("Content-Disposition", "attachment", filename="tagesdiagramm.png")
         msg.attach(img)
+    if png_bytes_2:
+        img2 = MIMEImage(png_bytes_2, name="regeluebersicht.png")
+        img2.add_header("Content-Disposition", "attachment", filename="regeluebersicht.png")
+        msg.attach(img2)
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
@@ -1243,6 +1252,213 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# REGELÜBERSICHTS-DIAGRAMM
+# ═══════════════════════════════════════════════════════════════════════════════
+def erstelle_regeldiagramm() -> bytes:
+    """
+    Erstellt Regelübersichts-Diagramm als PNG (DIN A4 Querformat).
+    X-Achse: 05:00 – 22:00 Uhr CEST
+    Y-Achse: SOC 0% – 100%
+    Zeigt alle EIN/AUS-Regeln beider Heizstäbe als farbige Zonen.
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.patches as mpatches
+        import matplotlib.lines as mlines
+        import matplotlib.ticker as mticker
+    except ImportError:
+        print("❌ matplotlib nicht verfügbar – kein Regeldiagramm")
+        return None
+
+    DARK_GREEN  = "#1a6e1a"
+    DARK_ORANGE = "#cc5500"
+
+    fig, ax = plt.subplots(figsize=(19, 11), facecolor="#f4f4f4")
+    ax.set_facecolor("#ffffff")
+
+    X_START, X_END = 300, 1320   # 05:00–22:00 in Minuten
+    ax.set_xlim(X_START, X_END)
+    ax.set_ylim(-2, 108)
+
+    def tm(h): return h * 60
+
+    # ── Außerhalb Betriebszeit: 05:00–06:00 schraffiert ─────────────────────
+    ax.axvspan(X_START, tm(6), alpha=0.12, color="#888888", zorder=0)
+    ax.text(tm(5, 30), 50, "außerhalb\nBetrieb", fontsize=7.5,
+            ha="center", va="center", color="#888888", rotation=90)
+
+    # ── SOC-Zonen (horizontale Bänder) ────────────────────────────────────────
+    zones = [
+        # (y_unten, y_oben, farbe, alpha, label_links)
+        (0,  30,  "#ff4444", 0.22, "Notreserve  (0–30%)\nKein EIN möglich"),
+        (30, 45,  "#aaaaaa", 0.18, "Zu niedrig  (30–44%)\nKein EIN möglich"),
+        (45, 65,  DARK_GREEN,0.16, "3kW  EIN\nSchnell  ≥20%/h\nÜb. ≥3.200W"),
+        (65, 75,  DARK_GREEN,0.24, "3kW  EIN\nMittel  15–19%/h\nÜb. ≥3.200W"),
+        (75, 83,  DARK_GREEN,0.12, "3kW + 6kW  EIN\nLangsam (3kW) / Schnell (6kW)"),
+        (83, 93,  DARK_GREEN,0.10, None),
+        (93, 98,  DARK_GREEN,0.30, None),
+        (98, 101, DARK_GREEN,0.20, None),
+    ]
+    for yb, yt, col, alp, lbl in zones:
+        ax.axhspan(yb, yt, alpha=alp, color=col, zorder=0)
+        if lbl:
+            ax.text(X_START + 12, (yb + yt) / 2, lbl,
+                    fontsize=7.5, color=col if col != "#ff4444" else "#cc0000",
+                    va="center", fontweight="bold")
+
+    # 6kW Zonen überlagert (orange)
+    zones_6kw = [
+        (75, 83,  DARK_ORANGE, 0.12),
+        (83, 93,  DARK_ORANGE, 0.22),
+        (93, 98,  DARK_ORANGE, 0.12),
+        (98, 101, DARK_ORANGE, 0.35),
+    ]
+    for yb, yt, col, alp in zones_6kw:
+        ax.axhspan(yb, yt, alpha=alp, color=col, zorder=0)
+
+    # ── Zonenbeschriftungen rechts (Mitte der Zone) ───────────────────────────
+    zone_labels = [
+        (79,  "3kW Langsam  (>0%/h, Üb.≥3.200W)   |   6kW Schnell  (≥20%/h, Üb.≥6.300W)"),
+        (88,  "3kW Langsam   |   6kW Mittel  (83%, 15–19%/h)  +  Langsam  (90%, >0%/h)  |  Üb.≥6.300W"),
+        (95.5,"3kW HOCHSPEICHER  (SOC ≥93% + PV ≥2.000W)   |   6kW Langsam  (Üb.≥6.300W)"),
+        (99.5,"3kW + 6kW HOCHSPEICHER  |  6kW EIN ab 98% + PV ≥4.500W  |  Einspeisung-Stopp (99%, sofort)"),
+    ]
+    for y, txt in zone_labels:
+        ax.text((X_START + X_END) / 2, y, txt,
+                fontsize=7.8, ha="center", va="center", zorder=4,
+                color="#222222", style="italic")
+
+    # ── Horizontale Schwellenlinien + Beschriftung rechte Achse ──────────────
+    schwellen = [
+        (30,  "red",        "--", 1.8, "30%  Notreserve"),
+        (45,  DARK_GREEN,   ":",  1.2, "45%  3kW EIN – Schnell"),
+        (65,  DARK_GREEN,   ":",  1.2, "65%  3kW EIN – Mittel"),
+        (70,  DARK_GREEN,   "-.", 0.9, "70%  3kW EIN – nach Sperre"),
+        (75,  DARK_GREEN,   "-",  1.5, "75%  3kW EIN langsam / AUS"),
+        (75,  DARK_ORANGE,  "-",  0.7, None),
+        (80,  DARK_ORANGE,  "-",  1.3, "80%  6kW AUS  (allgemein)"),
+        (83,  DARK_ORANGE,  ":",  1.0, "83%  6kW EIN – Mittel"),
+        (85,  DARK_GREEN,   "-",  1.8, "85%  3kW Hochsp.-AUS / Entlade-AUS"),
+        (90,  DARK_ORANGE,  ":",  1.0, "90%  6kW EIN – Langsam"),
+        (93,  DARK_GREEN,   "-",  2.2, "93%  3kW Hochsp.-EIN / 6kW Entlade-AUS"),
+        (98,  DARK_ORANGE,  "-",  2.2, "98%  6kW Hochsp.-EIN"),
+        (100, "#888888",    ":",  1.0, "100% Einspeisung-Stopp  (sofort EIN)"),
+    ]
+    label_x = X_END + 6
+    for entry in schwellen:
+        soc_val, col, ls, lw, lbl = entry
+        ax.axhline(soc_val, color=col, ls=ls, lw=lw, alpha=0.85, zorder=3)
+        if lbl:
+            ax.text(label_x, soc_val, lbl, fontsize=7.2, color=col,
+                    va="center", ha="left", clip_on=False)
+
+    # ── Vertikale Zeitlinien ───────────────────────────────────────────────────
+    ax.axvline(tm(6), color="#222222", lw=2.2, zorder=5)
+    ax.text(tm(6), 106, "06:00\nBetrieb\nSTART", fontsize=8, ha="center",
+            va="bottom", fontweight="bold", color="#222222")
+
+    ax.axvline(tm(22), color="#222222", lw=2.2, zorder=5)
+    ax.text(tm(22), 106, "22:00\nBetrieb\nENDE +\nAbschalt-\nPrüfung",
+            fontsize=8, ha="center", va="bottom", fontweight="bold", color="#222222")
+
+    # Cutover-Linien (saisonal)
+    cutover = [
+        (16, "#1155cc", "16:00"),
+        (17, "#7722aa", "17:00"),
+        (18, "#bb4400", "18:00"),
+    ]
+    for h, col, lbl in cutover:
+        ax.axvline(tm(h), color=col, lw=1.8, ls="--", alpha=0.9, zorder=5)
+        ax.text(tm(h), -1.5, lbl, fontsize=7.5, ha="center",
+                va="top", color=col, fontstyle="italic", fontweight="bold")
+
+    # ── Entlade-Betrieb Hinweisbox ────────────────────────────────────────────
+    ax.annotate(
+        "ENTLADE-BETRIEB\n"
+        "(aktiv nach Batterie=100%,\n vor Cutover-Zeit)\n"
+        "3kW läuft bis SOC < 85%\n"
+        "6kW läuft bis SOC < 93%\n"
+        "Netz ≤ 2.000W (Hochsp.)\n"
+        "Netz ≤ 800W (Pendingfenster)",
+        xy=(tm(9), 91), fontsize=7.5, ha="center", va="center",
+        bbox=dict(boxstyle="round,pad=0.45", fc="#ddeeff",
+                  ec="#3366aa", alpha=0.95, lw=1.3),
+        color="#003388", zorder=6)
+
+    # ── AUS-Pending Hinweisbox ────────────────────────────────────────────────
+    ax.annotate(
+        "AUS-Pending vor Cutover: 20 Min\n"
+        "AUS-Pending ab Cutover:  10 Min\n"
+        "EIN-Pending immer:       20 Min",
+        xy=(tm(19), 37), fontsize=7.5, ha="center", va="center",
+        bbox=dict(boxstyle="round,pad=0.4", fc="#fffbdd",
+                  ec="#cc9900", alpha=0.95, lw=1.2),
+        color="#664400", zorder=6)
+
+    # ── Betriebszeit-Label ────────────────────────────────────────────────────
+    ax.annotate("",
+        xy=(tm(22), -1.5), xytext=(tm(6), -1.5),
+        arrowprops=dict(arrowstyle="<->", color="#333333", lw=1.5))
+    ax.text((tm(6) + tm(22)) / 2, -1.5, "Betriebszeit  06:00 – 22:00 Uhr",
+            fontsize=8, ha="center", va="center", color="#333333",
+            bbox=dict(fc="white", ec="none", pad=1))
+
+    # ── Achsen ────────────────────────────────────────────────────────────────
+    tick_pos = [tm(h) for h in range(5, 23)]
+    tick_lbl = [f"{h:02d}:00" for h in range(5, 23)]
+    ax.set_xticks(tick_pos)
+    ax.set_xticklabels(tick_lbl, fontsize=9)
+    ax.set_yticks(range(0, 105, 5))
+    ax.yaxis.set_minor_locator(mticker.MultipleLocator(1))
+    ax.set_ylabel("Batterieladezustand  SOC (%)", fontsize=11)
+    ax.set_xlabel("Uhrzeit  (CEST)", fontsize=11, labelpad=18)
+    ax.grid(True, alpha=0.18, linestyle="--", which="major")
+    ax.grid(True, alpha=0.07, linestyle=":", which="minor")
+
+    ax.set_title(
+        "PV Heizstab Automation – Vollständige Regelübersicht\n"
+        "EIN- und AUS-Bedingungen nach SOC (Y-Achse) und Uhrzeit (X-Achse)\n"
+        "Grün = 3kW Brauchwasser  |  Dunkelorange = 6kW Fußbodenheizung  |  "
+        "Saison: Apr/Okt (aktuell)",
+        fontsize=12, fontweight="bold", pad=10)
+
+    # ── Legende ───────────────────────────────────────────────────────────────
+    legend_handles = [
+        mpatches.Patch(color=DARK_GREEN,  alpha=0.7,
+                       label="3kW – EIN-Zone (Normalbetrieb + Hochspeicher)"),
+        mpatches.Patch(color=DARK_ORANGE, alpha=0.7,
+                       label="6kW – EIN-Zone (Normalbetrieb + Hochspeicher)"),
+        mpatches.Patch(color="#ff4444",   alpha=0.5,
+                       label="Notreserve 0–30%  (kein EIN)"),
+        mlines.Line2D([], [], color="#222222", lw=2.0,
+                      label="Betriebszeit-Grenzen  06:00 / 22:00"),
+        mlines.Line2D([], [], color="#1155cc", lw=1.8, ls="--",
+                      label="Cutover Winter  (Nov–Mär):  16:00 Uhr"),
+        mlines.Line2D([], [], color="#7722aa", lw=1.8, ls="--",
+                      label="Cutover Frühling/Herbst  (Apr+Okt):  17:00 Uhr"),
+        mlines.Line2D([], [], color="#bb4400", lw=1.8, ls="--",
+                      label="Cutover Sommer  (Mai–Sep):  18:00 Uhr"),
+        mpatches.Patch(color="#ddeeff",   alpha=0.9, ec="#3366aa",
+                       label="Entlade-Betrieb  (nach Batterie 100%, vor Cutover)"),
+    ]
+    ax.legend(handles=legend_handles, loc="upper left",
+              bbox_to_anchor=(0.0, -0.10),
+              fontsize=8.5, ncol=4, framealpha=0.96,
+              edgecolor="#cccccc", title="Legende", title_fontsize=9)
+
+    plt.tight_layout(rect=[0.0, 0.09, 0.88, 1.0])
+
+    buf = io.BytesIO()
+    plt.savefig(buf, dpi=150, bbox_inches="tight", facecolor="#f4f4f4")
+    plt.close()
+    buf.seek(0)
+    print("✅ Regeldiagramm erstellt.")
+    return buf.read()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TAGESDIAGRAMM
 # ═══════════════════════════════════════════════════════════════════════════════
 def erstelle_tagesdiagramm(status: dict) -> bytes:
@@ -1703,9 +1919,10 @@ def verarbeite_tagesberichte(status: dict) -> None:
             status.get("tages_verlauf", []))
         quelle = "iSolarCloud" if status.get("tages_energie_isolarcloud") else "Schätzung"
         print(f"ℹ️  Energiedaten-Quelle: {quelle}")
-        png_bytes = erstelle_tagesdiagramm(status)
+        png_bytes  = erstelle_tagesdiagramm(status)
+        png_bytes2 = erstelle_regeldiagramm()
         betreff, text = erstelle_abendreport_text(status, energie)
-        sende_email_mit_anhang(betreff, text, png_bytes)
+        sende_email_mit_anhang(betreff, text, png_bytes, png_bytes2)
         status["abendreport_datum"] = heute_str
         print("✅ Abend-Report gesendet.")
 
