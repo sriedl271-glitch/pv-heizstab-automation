@@ -732,6 +732,27 @@ def ist_pending_bestaetigt(pending_seit: str, sekunden: int = PENDING_EIN_SEKUND
     except Exception:
         return False
 
+def get_aus_pending_cutover() -> int:
+    """Cutover-Stunde (CEST) ab der das AUS-Pending von 20 Min auf 10 Min reduziert wird.
+    Winter (Nov-Mär): 16:00 | Frühling/Herbst (Apr+Okt): 17:00 | Sommer (Mai-Sep): 18:00
+    """
+    monat = lokal_jetzt().month
+    if monat in [11, 12, 1, 2, 3]:
+        return 16
+    elif monat in [4, 10]:
+        return 17
+    else:
+        return 18
+
+def get_aus_pending_sekunden() -> int:
+    """Gibt die aktuelle AUS-Pending-Zeit zurück.
+    Vor Cutover: 20 Min (4 Zyklen, verhindert Flackern tagsüber).
+    Ab Cutover:  10 Min (2 Zyklen, schnelle Reaktion bei sinkender PV).
+    """
+    if lokal_jetzt().hour >= get_aus_pending_cutover():
+        return PENDING_AUS_SEKUNDEN   # 480s = 10 Min (2 Zyklen)
+    return PENDING_EIN_SEKUNDEN       # 780s = 20 Min (4 Zyklen)
+
 def ist_betriebszeit() -> bool:
     """Prüft ob aktuell Betriebszeit (06:00 – 22:00 Uhr CEST) ist."""
     return BETRIEB_START_STUNDE <= lokal_jetzt().hour < BETRIEB_ENDE_STUNDE
@@ -1037,7 +1058,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if not status.get("ausschalt_pending_6kw"):
                 status["ausschalt_pending_6kw"] = now_str
                 print("⏳ 6kW AUS: Pending")
-            elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), PENDING_AUS_SEKUNDEN):
+            elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), get_aus_pending_sekunden()):
                 print("🔴 6kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_6KW)
                 erfasse_schaltpunkt(status, "6kw", "AUS", soc, pv_w)
@@ -1070,7 +1091,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if not status.get("ausschalt_pending_3kw"):
                 status["ausschalt_pending_3kw"] = now_str
                 print("⏳ 3kW AUS: Pending")
-            elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), PENDING_AUS_SEKUNDEN):
+            elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), get_aus_pending_sekunden()):
                 print("🔴 3kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_3KW)
                 erfasse_schaltpunkt(status, "3kw", "AUS", soc, pv_w)
