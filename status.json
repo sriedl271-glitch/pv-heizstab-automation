@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 100,
-      "zeit": "2026-04-17T11:40:29.996431"
-    },
-    {
       "soc": 96,
       "zeit": "2026-04-17T11:45:29.197804"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 98,
       "zeit": "2026-04-17T12:35:25.494061"
+    },
+    {
+      "soc": 99,
+      "zeit": "2026-04-17T12:40:30.384839"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-17",
-    "ein_3kw": 3,
+    "ein_3kw": 4,
     "aus_3kw": 3,
     "ein_6kw": 4,
     "aus_6kw": 4
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-04-17T12:25:35.940932",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "EINSPEISUNG_STOPP",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-17T11:51:13.801995",
-  "letzte_aktualisierung": "2026-04-17T12:35:35.418550",
+  "letzte_schaltzeit": "2026-04-17T12:41:11.210278",
+  "letzte_aktualisierung": "2026-04-17T12:41:12.980270",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-17",
   "tages_verlauf": [
@@ -1208,6 +1208,17 @@
       "bat_laden_w": 1088,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3076
+    },
+    {
+      "zeit": "14:40",
+      "soc": 99,
+      "pv_w": 5734,
+      "haus_w": 886,
+      "einspeisung_w": 3758,
+      "netzbezug_w": 0,
+      "bat_laden_w": 1090,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 4848
     }
   ],
   "schaltpunkte_heute": [
@@ -1322,19 +1333,27 @@
       "soc": 93,
       "pv_w": 3949,
       "modus": "Übersch."
+    },
+    {
+      "zeit": "14:40",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 99,
+      "pv_w": 5734,
+      "modus": "EINSPEISUNG_STOPP"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 48.3,
-    "einspeisung_kwh": 11.6,
+    "pv_kwh": 48.8,
+    "einspeisung_kwh": 11.9,
     "netzbezug_kwh": 3.0,
-    "bat_laden_kwh": 13.9,
+    "bat_laden_kwh": 14.0,
     "bat_entladen_kwh": 3.2,
-    "haus_kwh": 29.0
+    "haus_kwh": 29.1
   },
   "morgenreport_datum": "2026-04-17",
   "abendreport_datum": "2026-04-16",
-  "einschalt_pending_6kw": null,
+  "einschalt_pending_6kw": "2026-04-17T12:40:40.916330",
   "einschalt_schwelle_3kw": null,
   "nach_ausschalt_sperre_3kw": false,
   "heizstab_6kw_ein": false,
