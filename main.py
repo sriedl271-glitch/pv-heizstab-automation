@@ -98,6 +98,13 @@ BETRIEB_START_STUNDE  = 6   # 06:00 Uhr CEST
 BETRIEB_ENDE_STUNDE   = 22  # 22:00 Uhr CEST
 ABSCHALT_FENSTER_MIN  = 10  # Abschalt-Prüfung nur in den ersten 10 Min nach 22:00
 
+# Hochspeicher-Entlade-Betrieb: Netzbezug-Grenzen
+# Aktiv wenn: batterie_war_voll=True UND vor Cutover-Zeit
+# Hochspeicher-Phase (SOC über AUS-Schwelle): tolerantere Grenze
+# Pending-Fenster (SOC unter AUS-Schwelle): strengere Grenze
+ENTLADE_NETZ_HOCHSPEICHER = 2000  # W – Netzbezug-Grenze in der Hochspeicher-Phase
+ENTLADE_NETZ_NORMAL       = 800   # W – Netzbezug-Grenze im Pending-Fenster / untere SOC-Zone
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # STATUS.JSON
@@ -753,6 +760,15 @@ def get_aus_pending_sekunden() -> int:
         return PENDING_AUS_SEKUNDEN   # 480s = 10 Min (2 Zyklen)
     return PENDING_EIN_SEKUNDEN       # 780s = 20 Min (4 Zyklen)
 
+def ist_entlade_betrieb(status: dict) -> bool:
+    """True wenn Hochspeicher-Entlade-Betrieb aktiv:
+    Batterie war heute mindestens einmal bei 100% UND wir sind vor der saisonalen Cutover-Zeit.
+    In diesem Modus dürfen Heizstäbe auf Batterieentladung laufen (kein PV-Minimum).
+    """
+    if not status.get("batterie_war_voll", False):
+        return False
+    return lokal_jetzt().hour < get_aus_pending_cutover()
+
 def ist_betriebszeit() -> bool:
     """Prüft ob aktuell Betriebszeit (06:00 – 22:00 Uhr CEST) ist."""
     return BETRIEB_START_STUNDE <= lokal_jetzt().hour < BETRIEB_ENDE_STUNDE
@@ -856,7 +872,7 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
             return True, "NORMAL", False, 85
         return False, None, False, None
 
-    if soc >= 97 and pv >= 2000:
+    if soc >= 93 and pv >= 2000:
         return True, "HOCHSPEICHER", False, None
 
     if laderate is None or laderate <= 0:
@@ -884,8 +900,24 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
     netzbezug          = daten["netzbezug_w"]
     pv                 = daten["pv_leistung_w"]
     modus              = status.get("modus_3kw", "NORMAL")
-    einschalt_schwelle = status.get("einschalt_schwelle_3kw")  # 45, 65, 70, 75, 85 oder None
+    einschalt_schwelle = status.get("einschalt_schwelle_3kw")
 
+    # ── Hochspeicher-Entlade-Betrieb (batterie_war_voll=True, vor Cutover) ───
+    if ist_entlade_betrieb(status):
+        # Netzbezug-Grenze: toleranter in Hochspeicher-Phase, strenger im Pending-Fenster
+        netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 85 else ENTLADE_NETZ_NORMAL
+        if netzbezug > netz_grenze:
+            return True, f"Netz>{netz_grenze}W"
+        # SOC-Grenze (PV-Bedingung entfällt – Batterie liefert Energie)
+        if soc < 85:
+            return True, "SOC<85%"
+        # Einspeisung-Stopp: SOC/PV-Check bleibt aktiv
+        if modus == "EINSPEISUNG_STOPP" and (soc < 95 or pv < 1000):
+            status["modus_3kw"] = "NORMAL"
+            return False, ""
+        return False, ""
+
+    # ── Normalbetrieb ─────────────────────────────────────────────────────────
     if netzbezug > 300:
         return True, "Netz"
     if ueberschuss < 1000:
@@ -895,7 +927,6 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
         if soc < einschalt_schwelle:
             return True, f"SOC<{einschalt_schwelle}%"
     else:
-        # Allgemeiner SOC-Schutz wenn keine spezifische Schwelle hinterlegt (z.B. HOCHSPEICHER)
         if soc < 75:
             return True, "SOC<75%"
     if modus == "HOCHSPEICHER" and (soc < 85 or pv < 1000):
@@ -917,11 +948,11 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
     ueberschuss = daten["ueberschuss_w"]
 
     if status.get("soc_abschaltung_6kw"):
-        if soc >= 99 and laderate is not None and laderate >= 0:
-            return True, "NORMAL", False, 99
+        if soc >= 98 and laderate is not None and laderate >= 0:
+            return True, "NORMAL", False, 98
         return False, None, False, None
 
-    if soc >= 99 and pv >= 4500:
+    if soc >= 98 and pv >= 4500:
         return True, "HOCHSPEICHER", False, None
 
     if laderate is None or laderate <= 0:
@@ -949,18 +980,27 @@ def pruefe_6kw_ausschalten(daten: dict, status: dict) -> tuple:
     netzbezug          = daten["netzbezug_w"]
     pv                 = daten["pv_leistung_w"]
     modus              = status.get("modus_6kw", "NORMAL")
-    einschalt_schwelle = status.get("einschalt_schwelle_6kw")  # 75, 83, 90, 99 oder None
+    einschalt_schwelle = status.get("einschalt_schwelle_6kw")
 
+    # ── Hochspeicher-Entlade-Betrieb (batterie_war_voll=True, vor Cutover) ───
+    if ist_entlade_betrieb(status):
+        netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 93 else ENTLADE_NETZ_NORMAL
+        if netzbezug > netz_grenze:
+            return True, f"Netz>{netz_grenze}W"
+        # SOC-Grenze (PV-Bedingung entfällt – Batterie liefert Energie)
+        if soc < 93:
+            return True, "SOC<93%"
+        return False, ""
+
+    # ── Normalbetrieb ─────────────────────────────────────────────────────────
     if netzbezug > 300:
         return True, "Netz"
     if ueberschuss < 4000:
         return True, "Übersch."
-    # Dynamische AUS-Schwelle: entspricht der SOC-Schwelle die das EIN ausgelöst hat
     if einschalt_schwelle is not None:
         if soc < einschalt_schwelle:
             return True, f"SOC<{einschalt_schwelle}%"
     else:
-        # Allgemeiner SOC-Schutz wenn keine spezifische Schwelle hinterlegt (z.B. HOCHSPEICHER)
         if soc < 80:
             return True, "SOC<80%"
     if modus == "HOCHSPEICHER" and (soc < 93 or pv < 4500):
@@ -998,6 +1038,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
         status["einschalt_schwelle_6kw"]    = None
         status["soc_abschaltung_3kw"]       = False
         status["soc_abschaltung_6kw"]       = False
+        status["batterie_war_voll"]         = False
         print("ℹ️  Tageswechsel: alle Einschalt-Sperren zurückgesetzt")
     status["schaltungen_heute"] = schaltungen
 
@@ -1053,6 +1094,17 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
     if not ist_6kw_saison():
         print("ℹ️  6kW: Sommersperre aktiv (16.Mai-30.Sep)")
 
+    # batterie_war_voll: einmalig setzen wenn SOC heute erstmals 100% erreicht
+    if soc >= 100 and not status.get("batterie_war_voll", False):
+        status["batterie_war_voll"] = True
+        print("ℹ️  Batterie erstmals 100% – Hochspeicher-Entlade-Betrieb aktiviert (bis Cutover)")
+
+    # AUS-Pending: im Entlade-Betrieb immer 10 Min (kein saisonales 20-Min-Pending)
+    entlade_betrieb = ist_entlade_betrieb(status)
+    aus_pending_sek = PENDING_AUS_SEKUNDEN if entlade_betrieb else get_aus_pending_sekunden()
+    if entlade_betrieb:
+        print(f"ℹ️  Hochspeicher-Entlade-Betrieb aktiv (AUS-Pending: 10 Min)")
+
     # ── 6kW AUSSCHALTEN ──────────────────────────────────────────────────────
     if ein_6kw:
         soll_aus, aus_grund_6kw = pruefe_6kw_ausschalten(daten, status)
@@ -1060,7 +1112,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if not status.get("ausschalt_pending_6kw"):
                 status["ausschalt_pending_6kw"] = now_str
                 print(f"⏳ 6kW AUS ({aus_grund_6kw}): Pending")
-            elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), get_aus_pending_sekunden()):
+            elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), aus_pending_sek):
                 print("🔴 6kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_6KW)
                 erfasse_schaltpunkt(status, "6kw", "AUS", soc, pv_w, aus_grund_6kw)
@@ -1093,7 +1145,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if not status.get("ausschalt_pending_3kw"):
                 status["ausschalt_pending_3kw"] = now_str
                 print(f"⏳ 3kW AUS ({aus_grund_3kw}): Pending")
-            elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), get_aus_pending_sekunden()):
+            elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), aus_pending_sek):
                 print("🔴 3kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_3KW)
                 erfasse_schaltpunkt(status, "3kw", "AUS", soc, pv_w, aus_grund_3kw)
