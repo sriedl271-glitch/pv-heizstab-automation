@@ -1989,13 +1989,12 @@ def verarbeite_tagesberichte(status: dict) -> None:
         status["morgenreport_datum"] = heute_str
         print("✅ Morgen-Report gesendet.")
 
-    # ── Abend-Report: TESTLAUF 21:15–21:25 CEST = 19:15–19:25 UTC ────────────
-    # TODO: nach Test wieder auf ABENDREPORT_UTC_STUNDE (19) und now_utc_m < 10 setzen
+    # ── Abend-Report: 21:00 CEST = 19:00 UTC ─────────────────────────────────
     letzter_abend = status.get("abendreport_datum")
     abend_faellig = (
         (letzter_abend is None or letzter_abend != heute_str)
-        and now_utc_h == 19
-        and now_utc_m >= 15 and now_utc_m < 25
+        and now_utc_h == ABENDREPORT_UTC_STUNDE
+        and now_utc_m < REPORT_FENSTER_MIN
     )
     if abend_faellig:
         print("📊 Abend-Report wird erstellt...")
