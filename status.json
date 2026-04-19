@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 85,
-      "zeit": "2026-04-19T11:35:25.580952"
-    },
-    {
       "soc": 87,
       "zeit": "2026-04-19T11:40:30.166435"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 96,
       "zeit": "2026-04-19T12:30:33.757992"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-04-19T12:35:25.576979"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-19",
-    "ein_3kw": 1,
+    "ein_3kw": 2,
     "aus_3kw": 1,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "EINSPEISUNG_STOPP",
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-19T12:11:12.802485",
-  "letzte_aktualisierung": "2026-04-19T12:30:44.372755",
+  "letzte_schaltzeit": "2026-04-19T12:36:06.821066",
+  "letzte_aktualisierung": "2026-04-19T12:36:08.942797",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-19",
   "tages_verlauf": [
@@ -1197,6 +1197,17 @@
       "bat_laden_w": 2045,
       "bat_entladen_w": 0,
       "ueberschuss_w": 2048
+    },
+    {
+      "zeit": "14:35",
+      "soc": 100,
+      "pv_w": 2653,
+      "haus_w": 683,
+      "einspeisung_w": 1970,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 1970
     }
   ],
   "schaltpunkte_heute": [
@@ -1215,13 +1226,21 @@
       "soc": 94,
       "pv_w": 2517,
       "modus": "Übersch."
+    },
+    {
+      "zeit": "14:35",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 100,
+      "pv_w": 2653,
+      "modus": "EINSPEISUNG_STOPP"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 17.3,
-    "einspeisung_kwh": 1.7,
+    "pv_kwh": 17.5,
+    "einspeisung_kwh": 1.8,
     "netzbezug_kwh": 0.0,
-    "bat_laden_kwh": 9.3,
+    "bat_laden_kwh": 9.4,
     "bat_entladen_kwh": 3.7,
     "haus_kwh": 10.0
   },
@@ -1238,5 +1257,5 @@
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-04-18",
   "ausschalt_pending_6kw": null,
-  "batterie_war_voll": false
+  "batterie_war_voll": true
 }
