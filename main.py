@@ -725,19 +725,35 @@ def ist_automation_pausiert() -> bool:
         pass
     return False
 
-def ist_manuell_pausiert(status: dict) -> bool:
-    sperre = status.get("manuell_sperre_bis")
+def ist_manuell_pausiert_3kw(status: dict) -> bool:
+    sperre = status.get("manuell_sperre_3kw_bis")
     if not sperre:
         return False
     try:
         bis = datetime.fromisoformat(sperre)
         if datetime.utcnow() < bis:
             bis_lokal = bis + timedelta(hours=CEST_OFFSET)
-            print(f"⏸️  2h-Sperre aktiv bis {bis_lokal.strftime('%H:%M')} Uhr")
+            print(f"⏸️  3kW 2h-Sperre aktiv bis {bis_lokal.strftime('%H:%M')} Uhr")
             return True
-        status["manuell_sperre_bis"] = None
+        status["manuell_sperre_3kw_bis"] = None
     except Exception:
-        status["manuell_sperre_bis"] = None
+        status["manuell_sperre_3kw_bis"] = None
+    return False
+
+
+def ist_manuell_pausiert_6kw(status: dict) -> bool:
+    sperre = status.get("manuell_sperre_6kw_bis")
+    if not sperre:
+        return False
+    try:
+        bis = datetime.fromisoformat(sperre)
+        if datetime.utcnow() < bis:
+            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            print(f"⏸️  6kW 2h-Sperre aktiv bis {bis_lokal.strftime('%H:%M')} Uhr")
+            return True
+        status["manuell_sperre_6kw_bis"] = None
+    except Exception:
+        status["manuell_sperre_6kw_bis"] = None
     return False
 
 def ist_pending_bestaetigt(pending_seit: str, sekunden: int = PENDING_EIN_SEKUNDEN) -> bool:
@@ -1065,7 +1081,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print("ℹ️  3kW AUS nach Schaltbefehl – kein 2h-Lock")
             else:
                 bis_lokal = (datetime.utcnow() + timedelta(hours=2+CEST_OFFSET)).strftime("%H:%M")
-                status["manuell_sperre_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
+                status["manuell_sperre_3kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
                 status["modus_3kw"] = None
                 msg = f"🖐️ 3kW manuell ausgeschaltet – Automatik gesperrt bis {bis_lokal} Uhr"
                 print(msg); meldungen.append(msg)
@@ -1079,7 +1095,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print("ℹ️  6kW AUS nach Schaltbefehl – kein 2h-Lock")
             else:
                 bis_lokal = (datetime.utcnow() + timedelta(hours=2+CEST_OFFSET)).strftime("%H:%M")
-                status["manuell_sperre_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
+                status["manuell_sperre_6kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
                 status["modus_6kw"] = None
                 msg = f"🖐️ 6kW manuell ausgeschaltet – Automatik gesperrt bis {bis_lokal} Uhr"
                 print(msg); meldungen.append(msg)
@@ -1170,7 +1186,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print("ℹ️  3kW AUS Pending geloescht")
 
     # ── 3kW EINSCHALTEN ──────────────────────────────────────────────────────
-    if not ein_3kw:
+    if not ein_3kw and not ist_manuell_pausiert_3kw(status):
         soll_ein, modus, sofort, einschalt_soc_min_3kw = pruefe_3kw_einschalten(daten, status, laderate)
         # Entlade-Betrieb: 10 Min Pending, sonst 20 Min
         ein_pending_3kw_sek = PENDING_AUS_SEKUNDEN if entlade_betrieb else PENDING_EIN_SEKUNDEN
@@ -1212,7 +1228,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print("ℹ️  3kW EIN Pending geloescht")
 
     # ── 6kW EINSCHALTEN ──────────────────────────────────────────────────────
-    if not ein_6kw:
+    if not ein_6kw and not ist_manuell_pausiert_6kw(status):
         soll_ein, modus, sofort, einschalt_soc_min_6kw = pruefe_6kw_einschalten(daten, status, laderate)
         # Entlade-Betrieb oder Langsames Laden (SOC≥90): 10 Min Pending, sonst 20 Min
         ein_pending_6kw_sek = PENDING_AUS_SEKUNDEN if (entlade_betrieb or einschalt_soc_min_6kw == 90) else PENDING_EIN_SEKUNDEN
@@ -2073,7 +2089,7 @@ def main() -> None:
     verarbeite_tagesberichte(status)
 
     # Pausen prüfen
-    if ist_automation_pausiert() or ist_manuell_pausiert(status):
+    if ist_automation_pausiert():
         status["letzte_aktualisierung"] = datetime.utcnow().isoformat()
         speichere_status(status)
         print("=== PV MONITOR ENDE (Pause) ===")
