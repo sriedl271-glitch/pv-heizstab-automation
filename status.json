@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 100,
-      "zeit": "2026-04-20T15:05:29.741593"
-    },
-    {
-      "soc": 100,
       "zeit": "2026-04-20T15:10:31.764890"
     },
     {
@@ -47,22 +43,26 @@
     {
       "soc": 98,
       "zeit": "2026-04-20T16:00:45.702851"
+    },
+    {
+      "soc": 98,
+      "zeit": "2026-04-20T16:05:28.125252"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-20",
     "ein_3kw": 2,
-    "aus_3kw": 1,
+    "aus_3kw": 2,
     "ein_6kw": 1,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "NORMAL",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-20T10:36:10.653807",
-  "letzte_aktualisierung": "2026-04-20T16:00:57.019110",
-  "ausschalt_pending_3kw": "2026-04-20T15:55:43.228391",
+  "letzte_schaltzeit": "2026-04-20T16:06:07.359948",
+  "letzte_aktualisierung": "2026-04-20T16:06:09.054190",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-20",
   "tages_verlauf": [
     {
@@ -1659,6 +1659,17 @@
       "bat_laden_w": 968,
       "bat_entladen_w": 0,
       "ueberschuss_w": 954
+    },
+    {
+      "zeit": "18:05",
+      "soc": 98,
+      "pv_w": 1150,
+      "haus_w": 893,
+      "einspeisung_w": 0,
+      "netzbezug_w": 107,
+      "bat_laden_w": 364,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 257
     }
   ],
   "schaltpunkte_heute": [
@@ -1693,15 +1704,23 @@
       "soc": 99,
       "pv_w": 4593,
       "modus": "HOCHSPEICHER"
+    },
+    {
+      "zeit": "18:05",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 98,
+      "pv_w": 1150,
+      "modus": "Übersch."
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 56.7,
+    "pv_kwh": 56.8,
     "einspeisung_kwh": 11.8,
     "netzbezug_kwh": 1.2,
     "bat_laden_kwh": 17.0,
-    "bat_entladen_kwh": 8.4,
-    "haus_kwh": 37.5
+    "bat_entladen_kwh": 8.5,
+    "haus_kwh": 37.7
   },
   "morgenreport_datum": "2026-04-20",
   "abendreport_datum": "2026-04-19",
