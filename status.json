@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 98,
-      "zeit": "2026-04-20T10:30:39.689931"
-    },
-    {
       "soc": 99,
       "zeit": "2026-04-20T10:35:28.900289"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 90,
       "zeit": "2026-04-20T11:25:26.693605"
+    },
+    {
+      "soc": 89,
+      "zeit": "2026-04-20T11:30:38.143051"
     }
   ],
   "schaltungen_heute": {
@@ -61,8 +61,8 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-04-20T10:36:10.653807",
-  "letzte_aktualisierung": "2026-04-20T11:25:40.585557",
-  "ausschalt_pending_3kw": "2026-04-20T11:25:40.585477",
+  "letzte_aktualisierung": "2026-04-20T11:30:50.429556",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-20",
   "tages_verlauf": [
     {
@@ -1054,6 +1054,17 @@
       "bat_laden_w": 745,
       "bat_entladen_w": 0,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "13:30",
+      "soc": 89,
+      "pv_w": 6661,
+      "haus_w": 8985,
+      "einspeisung_w": 0,
+      "netzbezug_w": 1645,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 679,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1091,25 +1102,26 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 33.1,
+    "pv_kwh": 33.6,
     "einspeisung_kwh": 4.7,
     "netzbezug_kwh": 1.0,
-    "bat_laden_kwh": 12.8,
-    "bat_entladen_kwh": 5.6,
-    "haus_kwh": 22.2
+    "bat_laden_kwh": 12.9,
+    "bat_entladen_kwh": 5.8,
+    "haus_kwh": 22.8
   },
   "morgenreport_datum": "2026-04-20",
   "abendreport_datum": "2026-04-19",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": null,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": true,
-  "modus_6kw": "HOCHSPEICHER",
+  "heizstab_6kw_ein": false,
+  "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
   "nach_ausschalt_sperre_6kw": false,
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-04-19",
   "ausschalt_pending_6kw": "2026-04-20T11:20:43.776523",
-  "batterie_war_voll": true
+  "batterie_war_voll": true,
+  "manuell_sperre_6kw_bis": "2026-04-20T13:30:48.643334"
 }
