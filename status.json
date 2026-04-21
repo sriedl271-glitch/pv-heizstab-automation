@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 94,
-      "zeit": "2026-04-21T15:25:27.091440"
-    },
-    {
       "soc": 95,
       "zeit": "2026-04-21T15:30:39.712363"
     },
@@ -47,22 +43,26 @@
     {
       "soc": 100,
       "zeit": "2026-04-21T16:20:28.254127"
+    },
+    {
+      "soc": 98,
+      "zeit": "2026-04-21T16:25:27.196844"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-21",
     "ein_3kw": 3,
-    "aus_3kw": 2,
+    "aus_3kw": 3,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "EINSPEISUNG_STOPP",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-21T16:06:09.034777",
-  "letzte_aktualisierung": "2026-04-21T16:20:38.502101",
-  "ausschalt_pending_3kw": "2026-04-21T16:15:41.212284",
+  "letzte_schaltzeit": "2026-04-21T16:26:07.199072",
+  "letzte_aktualisierung": "2026-04-21T16:26:08.602704",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-21",
   "tages_verlauf": [
     {
@@ -1703,6 +1703,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 1421,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "18:25",
+      "soc": 98,
+      "pv_w": 1979,
+      "haus_w": 3479,
+      "einspeisung_w": 0,
+      "netzbezug_w": 26,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 1474,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1761,15 +1772,23 @@
       "soc": 99,
       "pv_w": 1867,
       "modus": "EINSPEISUNG_STOPP"
+    },
+    {
+      "zeit": "18:25",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 98,
+      "pv_w": 1979,
+      "modus": "Übersch."
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 35.8,
+    "pv_kwh": 35.9,
     "einspeisung_kwh": 3.3,
     "netzbezug_kwh": 0.1,
     "bat_laden_kwh": 14.7,
-    "bat_entladen_kwh": 9.9,
-    "haus_kwh": 27.8
+    "bat_entladen_kwh": 10.0,
+    "haus_kwh": 28.0
   },
   "morgenreport_datum": "2026-04-21",
   "abendreport_datum": "2026-04-20",
