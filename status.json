@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 97,
-      "zeit": "2026-04-21T16:30:37.300134"
-    },
-    {
       "soc": 96,
       "zeit": "2026-04-21T16:35:33.419747"
     },
@@ -47,22 +43,26 @@
     {
       "soc": 96,
       "zeit": "2026-04-21T17:25:26.721184"
+    },
+    {
+      "soc": 94,
+      "zeit": "2026-04-21T17:30:34.335661"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-21",
     "ein_3kw": 5,
-    "aus_3kw": 4,
+    "aus_3kw": 5,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "EINSPEISUNG_STOPP",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-21T17:16:10.481313",
-  "letzte_aktualisierung": "2026-04-21T17:25:37.145595",
-  "ausschalt_pending_3kw": "2026-04-21T17:20:39.393686",
+  "letzte_schaltzeit": "2026-04-21T17:31:14.403905",
+  "letzte_aktualisierung": "2026-04-21T17:31:15.909304",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-21",
   "tages_verlauf": [
     {
@@ -1846,6 +1846,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 2636,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "19:30",
+      "soc": 94,
+      "pv_w": 549,
+      "haus_w": 5451,
+      "einspeisung_w": 0,
+      "netzbezug_w": 9,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 4893,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1936,6 +1947,14 @@
       "soc": 100,
       "pv_w": 1084,
       "modus": "EINSPEISUNG_STOPP"
+    },
+    {
+      "zeit": "19:30",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 94,
+      "pv_w": 549,
+      "modus": "Übersch."
     }
   ],
   "tages_energie_isolarcloud": {
@@ -1943,8 +1962,8 @@
     "einspeisung_kwh": 3.6,
     "netzbezug_kwh": 0.1,
     "bat_laden_kwh": 15.3,
-    "bat_entladen_kwh": 10.9,
-    "haus_kwh": 29.7
+    "bat_entladen_kwh": 11.3,
+    "haus_kwh": 30.1
   },
   "morgenreport_datum": "2026-04-21",
   "abendreport_datum": "2026-04-20",
