@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 100,
-      "zeit": "2026-04-21T16:15:30.171597"
-    },
-    {
-      "soc": 100,
       "zeit": "2026-04-21T16:20:28.254127"
     },
     {
@@ -47,12 +43,16 @@
     {
       "soc": 100,
       "zeit": "2026-04-21T17:10:29.710881"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-04-21T17:15:29.054233"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-21",
-    "ein_3kw": 4,
-    "aus_3kw": 3,
+    "ein_3kw": 5,
+    "aus_3kw": 4,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
@@ -60,9 +60,9 @@
   "modus_3kw": "EINSPEISUNG_STOPP",
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-21T17:01:27.051505",
-  "letzte_aktualisierung": "2026-04-21T17:10:40.545432",
-  "ausschalt_pending_3kw": "2026-04-21T17:05:38.865915",
+  "letzte_schaltzeit": "2026-04-21T17:16:10.481313",
+  "letzte_aktualisierung": "2026-04-21T17:16:13.926036",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-21",
   "tages_verlauf": [
     {
@@ -1813,6 +1813,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 0,
       "ueberschuss_w": 831
+    },
+    {
+      "zeit": "19:15",
+      "soc": 100,
+      "pv_w": 1084,
+      "haus_w": 3348,
+      "einspeisung_w": 5,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 2269,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1887,15 +1898,31 @@
       "soc": 99,
       "pv_w": 2261,
       "modus": "EINSPEISUNG_STOPP"
+    },
+    {
+      "zeit": "19:15",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 100,
+      "pv_w": 1084,
+      "modus": "Übersch."
+    },
+    {
+      "zeit": "19:15",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 100,
+      "pv_w": 1084,
+      "modus": "EINSPEISUNG_STOPP"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 37.3,
+    "pv_kwh": 37.4,
     "einspeisung_kwh": 3.6,
     "netzbezug_kwh": 0.1,
     "bat_laden_kwh": 15.3,
-    "bat_entladen_kwh": 10.4,
-    "haus_kwh": 28.9
+    "bat_entladen_kwh": 10.5,
+    "haus_kwh": 29.1
   },
   "morgenreport_datum": "2026-04-21",
   "abendreport_datum": "2026-04-20",
