@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 98,
-      "zeit": "2026-04-21T16:00:48.551276"
-    },
-    {
       "soc": 99,
       "zeit": "2026-04-21T16:05:27.920560"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 98,
       "zeit": "2026-04-21T16:55:25.485485"
+    },
+    {
+      "soc": 99,
+      "zeit": "2026-04-21T17:00:45.409883"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-21",
-    "ein_3kw": 3,
+    "ein_3kw": 4,
     "aus_3kw": 3,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "EINSPEISUNG_STOPP",
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-21T16:26:07.199072",
-  "letzte_aktualisierung": "2026-04-21T16:55:35.726606",
+  "letzte_schaltzeit": "2026-04-21T17:01:27.051505",
+  "letzte_aktualisierung": "2026-04-21T17:01:29.570578",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-21",
   "tages_verlauf": [
@@ -1780,6 +1780,17 @@
       "bat_laden_w": 1087,
       "bat_entladen_w": 0,
       "ueberschuss_w": 1880
+    },
+    {
+      "zeit": "19:00",
+      "soc": 99,
+      "pv_w": 2261,
+      "haus_w": 460,
+      "einspeisung_w": 708,
+      "netzbezug_w": 0,
+      "bat_laden_w": 1093,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 1801
     }
   ],
   "schaltpunkte_heute": [
@@ -1846,15 +1857,23 @@
       "soc": 98,
       "pv_w": 1979,
       "modus": "Übersch."
+    },
+    {
+      "zeit": "19:00",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 99,
+      "pv_w": 2261,
+      "modus": "EINSPEISUNG_STOPP"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 36.9,
-    "einspeisung_kwh": 3.4,
+    "pv_kwh": 37.0,
+    "einspeisung_kwh": 3.5,
     "netzbezug_kwh": 0.1,
-    "bat_laden_kwh": 15.1,
+    "bat_laden_kwh": 15.2,
     "bat_entladen_kwh": 10.4,
-    "haus_kwh": 28.9
+    "haus_kwh": 28.8
   },
   "morgenreport_datum": "2026-04-21",
   "abendreport_datum": "2026-04-20",
