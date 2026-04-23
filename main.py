@@ -81,8 +81,8 @@ MP_HAUS_HEUTE      = "13199"  # Daily Load Consumption (Wh)
 SAISON_6KW_START = (10, 1)
 SAISON_6KW_ENDE  = (5, 15)
 
-# Pending-Mindestwartezeit: EIN 20 Min (4 Zyklen), AUS 10 Min (2 Zyklen)
-PENDING_EIN_SEKUNDEN = 780   # EIN: 4 × 5 Min = 20 Min – verhindert Flackern bei wechselhafter PV
+# Pending-Mindestwartezeit: EIN 10 Min (2 Zyklen), AUS 10 Min (2 Zyklen)
+PENDING_EIN_SEKUNDEN = 480   # EIN: 2 × 5 Min = 10 Min – Testwert (war 780 = 15 Min effektiv)
 PENDING_AUS_SEKUNDEN = 480   # AUS: 2 × 5 Min = 10 Min – schneller Schutz bei fallendem SOC
 
 # Zeitzone: CEST = UTC+2 (April–Oktober)
@@ -890,12 +890,12 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
     einspeisung = daten.get("einspeisung_w", 0)
 
     # Einspeisung-Stopp: gilt in beiden Modi (sofort, ohne Pending)
-    if einspeisung > 0 and soc >= 99 and pv >= 1000:
+    if einspeisung > 0 and soc >= 93 and pv >= 1000:
         return True, "EINSPEISUNG_STOPP", True, None
 
     # ── Entlade-Betrieb: nur Hochspeicher-Regel ───────────────────────────────
     if ist_entlade_betrieb(status):
-        if soc >= 93 and pv >= 2000:
+        if soc >= 85 and pv >= 2000:
             return True, "HOCHSPEICHER", False, None
         return False, None, False, None
 
@@ -909,11 +909,11 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
             return True, "NORMAL", False, 75
         return False, None, False, None
 
-    if laderate >= 20 and soc >= 45 and ueberschuss >= 3200:
+    if laderate >= 20 and soc >= 45 and ueberschuss >= 3000:
         return True, "NORMAL", False, 45
-    if laderate >= 15 and soc >= 60 and ueberschuss >= 3200:
+    if laderate >= 15 and soc >= 60 and ueberschuss >= 3000:
         return True, "NORMAL", False, 60
-    if laderate > 0  and soc >= 75 and ueberschuss >= 3200:
+    if laderate > 0  and soc >= 75 and ueberschuss >= 3000:
         return True, "NORMAL", False, 75
 
     return False, None, False, None
@@ -929,24 +929,22 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
 
     # ── Hochspeicher-Entlade-Betrieb (batterie_war_voll=True, vor Cutover) ───
     if ist_entlade_betrieb(status):
-        # Netzbezug-Grenze: toleranter in Hochspeicher-Phase, strenger im Pending-Fenster
-        netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 85 else ENTLADE_NETZ_NORMAL
+        # Netzbezug-Grenze: toleranter in Hochspeicher-Phase, strenger im unteren SOC-Fenster
+        netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 75 else ENTLADE_NETZ_NORMAL
         if netzbezug > netz_grenze:
             return True, f"Netz>{netz_grenze}W"
         # SOC-Grenze (PV-Bedingung entfällt – Batterie liefert Energie)
-        if soc < 85:
-            return True, "SOC<85%"
-        # Einspeisung-Stopp: SOC/PV-Check bleibt aktiv
-        if modus == "EINSPEISUNG_STOPP" and (soc < 95 or pv < 1000):
+        if soc < 75:
+            return True, "SOC<75%"
+        # Einspeisung-Stopp: PV-Check bleibt aktiv, SOC-Check an neue Schwelle angepasst
+        if modus == "EINSPEISUNG_STOPP" and (soc < 75 or pv < 1000):
             status["modus_3kw"] = "NORMAL"
             return False, ""
         return False, ""
 
     # ── Normalbetrieb ─────────────────────────────────────────────────────────
-    if netzbezug > 300:
+    if netzbezug > 2000:
         return True, "Netz"
-    if ueberschuss < 1000:
-        return True, "Übersch."
     # Dynamische AUS-Schwelle: entspricht der SOC-Schwelle die das EIN ausgelöst hat
     if einschalt_schwelle is not None:
         if soc < einschalt_schwelle:
@@ -954,7 +952,7 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
     else:
         if soc < 75:
             return True, "SOC<75%"
-    if modus == "EINSPEISUNG_STOPP" and (soc < 95 or pv < 1000):
+    if modus == "EINSPEISUNG_STOPP" and (soc < 75 or pv < 1000):
         status["modus_3kw"] = "NORMAL"
         return False, ""
     return False, ""
@@ -972,7 +970,7 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     # ── Entlade-Betrieb: nur Hochspeicher-Regel ───────────────────────────────
     if ist_entlade_betrieb(status):
-        if soc >= 98 and pv >= 4500:
+        if soc >= 90 and pv >= 4000:
             return True, "HOCHSPEICHER", False, None
         return False, None, False, None
 
@@ -982,15 +980,15 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 90% neu einschalten
     if status.get("nach_ausschalt_sperre_6kw"):
-        if laderate > 0 and soc >= 90 and ueberschuss >= 6300:
+        if laderate > 0 and soc >= 90 and ueberschuss >= 4000:
             return True, "NORMAL", False, 90
         return False, None, False, None
 
     if laderate >= 20 and soc >= 75 and ueberschuss >= 6300:
         return True, "NORMAL", False, 75
-    if laderate >= 15 and soc >= 83 and ueberschuss >= 6300:
+    if laderate >= 15 and soc >= 83 and ueberschuss >= 5000:
         return True, "NORMAL", False, 83
-    if laderate > 0  and soc >= 90 and ueberschuss >= 6300:
+    if laderate > 0  and soc >= 90 and ueberschuss >= 4000:
         return True, "NORMAL", False, 90
 
     return False, None, False, None
@@ -1006,19 +1004,17 @@ def pruefe_6kw_ausschalten(daten: dict, status: dict) -> tuple:
 
     # ── Hochspeicher-Entlade-Betrieb (batterie_war_voll=True, vor Cutover) ───
     if ist_entlade_betrieb(status):
-        netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 93 else ENTLADE_NETZ_NORMAL
+        netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 80 else ENTLADE_NETZ_NORMAL
         if netzbezug > netz_grenze:
             return True, f"Netz>{netz_grenze}W"
         # SOC-Grenze (PV-Bedingung entfällt – Batterie liefert Energie)
-        if soc < 93:
-            return True, "SOC<93%"
+        if soc < 80:
+            return True, "SOC<80%"
         return False, ""
 
     # ── Normalbetrieb ─────────────────────────────────────────────────────────
-    if netzbezug > 300:
+    if netzbezug > 2000:
         return True, "Netz"
-    if ueberschuss < 4000:
-        return True, "Übersch."
     if einschalt_schwelle is not None:
         if soc < einschalt_schwelle:
             return True, f"SOC<{einschalt_schwelle}%"
