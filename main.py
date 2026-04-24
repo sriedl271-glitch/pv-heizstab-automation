@@ -650,6 +650,7 @@ def reset_wenn_neuer_tag(status: dict) -> None:
         status["tages_datum"]        = heute_str
         status["tages_verlauf"]      = []
         status["schaltpunkte_heute"] = []
+        status["soc_verlauf"]        = []
         print(f"🌅 Neuer Tag: {heute_str} – Tagesdaten zurückgesetzt")
 
 def aktualisiere_tages_verlauf(status: dict, daten: dict) -> None:
@@ -889,12 +890,11 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
     ueberschuss = daten["ueberschuss_w"]
     einspeisung = daten.get("einspeisung_w", 0)
 
-    # Einspeisung-Stopp: gilt in beiden Modi (sofort, ohne Pending)
-    if einspeisung > 0 and soc >= 93 and pv >= 1000:
-        return True, "EINSPEISUNG_STOPP", True, None
-
-    # ── Entlade-Betrieb: nur Hochspeicher-Regel ───────────────────────────────
+    # ── Entlade-Betrieb (SOC heute erstmals 100% erreicht, vor Cutover) ──────
     if ist_entlade_betrieb(status):
+        # Einspeisung-Stopp: nur im Entlade-Betrieb – sofort EIN ohne Pending
+        if einspeisung > 0 and soc >= 93 and pv >= 1000:
+            return True, "EINSPEISUNG_STOPP", True, None
         if soc >= 85 and pv >= 2000:
             return True, "HOCHSPEICHER", False, None
         return False, None, False, None
@@ -905,13 +905,13 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 75% neu einschalten
     if status.get("nach_ausschalt_sperre_3kw"):
-        if laderate > 0 and soc >= 75 and ueberschuss >= 3200:
+        if laderate > 0 and soc >= 75 and ueberschuss >= 3000:
             return True, "NORMAL", False, 75
         return False, None, False, None
 
-    if laderate >= 20 and soc >= 45 and ueberschuss >= 3000:
+    if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 3000:
         return True, "NORMAL", False, 45
-    if laderate >= 15 and soc >= 60 and ueberschuss >= 3000:
+    if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 3000:
         return True, "NORMAL", False, 60
     if laderate > 0  and soc >= 75 and ueberschuss >= 3000:
         return True, "NORMAL", False, 75
