@@ -169,10 +169,12 @@ def sende_email(betreff: str, inhalt: str) -> None:
 
 def sende_email_mit_anhang(betreff: str, inhalt: str,
                            png_bytes: bytes = None,
-                           png_bytes_2: bytes = None) -> None:
-    """Sendet E-Mail mit bis zu zwei optionalen PNG-Anhängen.
+                           png_bytes_2: bytes = None,
+                           png_bytes_3: bytes = None) -> None:
+    """Sendet E-Mail mit bis zu drei optionalen PNG-Anhängen.
     png_bytes   = Tagesdiagramm (aktueller Tag)
     png_bytes_2 = Regelübersichts-Diagramm
+    png_bytes_3 = Laderate-Analyse Normalbetrieb
     """
     passwort = os.environ.get("GMAIL_APP_PASSWORD")
     adresse  = "sriedl271@gmail.com"
@@ -192,6 +194,10 @@ def sende_email_mit_anhang(betreff: str, inhalt: str,
         img2 = MIMEImage(png_bytes_2, name="regeluebersicht.png")
         img2.add_header("Content-Disposition", "attachment", filename="regeluebersicht.png")
         msg.attach(img2)
+    if png_bytes_3:
+        img3 = MIMEImage(png_bytes_3, name="laderate_analyse.png")
+        img3.add_header("Content-Disposition", "attachment", filename="laderate_analyse.png")
+        msg.attach(img3)
     try:
         with smtplib.SMTP("smtp.gmail.com", 587) as server:
             server.starttls()
@@ -651,6 +657,7 @@ def reset_wenn_neuer_tag(status: dict) -> None:
         status["tages_verlauf"]      = []
         status["schaltpunkte_heute"] = []
         status["soc_verlauf"]        = []
+        status["laderate_verlauf"]   = []
         print(f"🌅 Neuer Tag: {heute_str} – Tagesdaten zurückgesetzt")
 
 def aktualisiere_tages_verlauf(status: dict, daten: dict) -> None:
@@ -1836,6 +1843,191 @@ def erstelle_tagesdiagramm(status: dict) -> bytes:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# LADERATE-ANALYSE DIAGRAMM (Normalbetrieb)
+# ═══════════════════════════════════════════════════════════════════════════════
+def erstelle_laderate_diagramm(status: dict) -> bytes:
+    """
+    Erstellt Laderate-Analyse PNG mit zwei Tabellen (3kW / 6kW) + SOC-Kurve.
+    Zeitraum: Betriebsstart bis erstes SOC=100% (Normalbetrieb).
+    Datenquelle: status['laderate_verlauf']
+    """
+    try:
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+        import matplotlib.gridspec as gridspec
+    except ImportError:
+        print("❌ matplotlib nicht verfügbar – kein Laderate-Diagramm")
+        return None
+
+    DARK_GREEN  = "#1a6e1a"
+    DARK_ORANGE = "#cc5500"
+
+    verlauf   = status.get("laderate_verlauf", [])
+    datum_str = status.get("tages_datum", lokal_jetzt().strftime("%Y-%m-%d"))
+
+    if not verlauf:
+        fig, ax = plt.subplots(figsize=(12, 3), facecolor="#f8f8f8")
+        ax.text(0.5, 0.5,
+                "Kein Normalbetrieb-Verlauf verfügbar\n"
+                "(SOC hat heute nicht 100% erreicht oder keine Daten)",
+                ha="center", va="center", transform=ax.transAxes, fontsize=12)
+        ax.axis("off")
+        buf = io.BytesIO()
+        plt.savefig(buf, dpi=120, bbox_inches="tight", facecolor="#f8f8f8")
+        plt.close()
+        buf.seek(0)
+        return buf.read()
+
+    def signal_3kw(soc, ueberschuss, laderate):
+        if laderate is None or laderate <= 0:
+            return "–"
+        if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 3000:
+            return "Schnell"
+        if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 3000:
+            return "Mittel"
+        if laderate > 0  and soc >= 75 and ueberschuss >= 3000:
+            return "Langsam"
+        return "–"
+
+    def signal_6kw(soc, ueberschuss, laderate):
+        if laderate is None or laderate <= 0:
+            return "–"
+        if laderate >= 20 and soc >= 75 and ueberschuss >= 6300:
+            return "Schnell"
+        if laderate >= 15 and soc >= 83 and ueberschuss >= 5000:
+            return "Mittel"
+        if laderate > 0  and soc >= 90 and ueberschuss >= 4000:
+            return "Langsam"
+        return "–"
+
+    headers   = ["Zeit", "SOC %", "Übersch. W", "Laderate %/h", "# Pkte", "Signal"]
+    rows_3kw  = []
+    rows_6kw  = []
+    zeiten    = []
+    soc_werte = []
+
+    for e in verlauf:
+        lr  = e.get("laderate")
+        lr_str = f"{lr:.1f}" if lr is not None else "–"
+        soc = e["soc"]
+        ueb = e["ueberschuss"]
+        n   = e["n_punkte"]
+        zeit = e["zeit"]
+        sig3 = signal_3kw(soc, ueb, lr)
+        sig6 = signal_6kw(soc, ueb, lr)
+        rows_3kw.append([zeit, str(soc), str(ueb), lr_str, str(n), sig3])
+        rows_6kw.append([zeit, str(soc), str(ueb), lr_str, str(n), sig6])
+        zeiten.append(zeit)
+        soc_werte.append(soc)
+
+    n_rows = len(rows_3kw)
+
+    # Figurhöhe dynamisch: Tabelle braucht ~0.22 inch pro Zeile, min 3 inch
+    tbl_h   = max(3.0, n_rows * 0.22 + 1.2)
+    soc_h   = 3.5
+    fig_h   = min(tbl_h * 2 + soc_h + 1.5, 80)   # max 80 inch
+
+    fig = plt.figure(figsize=(14, fig_h), facecolor="#f8f8f8")
+    gs  = gridspec.GridSpec(3, 1,
+                            height_ratios=[tbl_h, tbl_h, soc_h],
+                            hspace=0.5,
+                            left=0.02, right=0.98,
+                            top=0.98, bottom=0.01)
+
+    def zeichne_tabelle(ax, titel, rows, farbe):
+        ax.axis("off")
+        ax.set_title(titel, fontsize=11, fontweight="bold", color=farbe, pad=8)
+        if not rows:
+            ax.text(0.5, 0.5, "Keine Daten", ha="center", va="center",
+                    transform=ax.transAxes, fontsize=10)
+            return
+        tbl = ax.table(
+            cellText=rows,
+            colLabels=headers,
+            loc="center",
+            cellLoc="center",
+        )
+        tbl.auto_set_font_size(False)
+        tbl.set_fontsize(8)
+        tbl.auto_set_column_width(col=list(range(len(headers))))
+
+        # Kopfzeile
+        for j in range(len(headers)):
+            tbl[0, j].set_facecolor(farbe)
+            tbl[0, j].set_text_props(color="white", fontweight="bold")
+
+        # Zeilen: Signal-Zeilen hervorheben, sonst abwechselnd
+        sig_bg_ja  = "#c8eec8" if farbe == DARK_GREEN else "#ffe0b0"
+        for i, row in enumerate(rows, 1):
+            signal = row[-1]
+            if signal != "–":
+                bg = sig_bg_ja
+            elif i % 2 == 0:
+                bg = "#f0f0f0"
+            else:
+                bg = "#ffffff"
+            for j in range(len(headers)):
+                tbl[i, j].set_facecolor(bg)
+
+    ax1 = fig.add_subplot(gs[0])
+    zeichne_tabelle(ax1,
+                    f"① 3kW Brauchwasser – Normalbetrieb {datum_str}  "
+                    f"(Schwellen: Schnell SOC 45–59% ≥20%/h ≥3000W | "
+                    f"Mittel SOC 60–74% ≥15%/h ≥3000W | Langsam SOC ≥75% >0 ≥3000W)",
+                    rows_3kw, DARK_GREEN)
+
+    ax2 = fig.add_subplot(gs[1])
+    zeichne_tabelle(ax2,
+                    f"② 6kW Fußbodenheizung – Normalbetrieb {datum_str}  "
+                    f"(Schwellen: Schnell SOC ≥75% ≥20%/h ≥6300W | "
+                    f"Mittel SOC ≥83% ≥15%/h ≥5000W | Langsam SOC ≥90% >0 ≥4000W)",
+                    rows_6kw, DARK_ORANGE)
+
+    # ── SOC-Kurve ─────────────────────────────────────────────────────────────
+    ax3 = fig.add_subplot(gs[2])
+    ax3.set_facecolor("#ffffff")
+
+    x = list(range(n_rows))
+    ax3.plot(x, soc_werte, color=DARK_GREEN, lw=2.5, zorder=5)
+    ax3.fill_between(x, 0, soc_werte, alpha=0.12, color=DARK_GREEN)
+
+    # Schwellenlinien mit Beschriftung
+    schwellen = [
+        (45, "#2e7d32", "45% Schnell 3kW"),
+        (60, "#43a047", "60% Mittel 3kW"),
+        (75, DARK_GREEN, "75% Langsam 3kW / Schnell 6kW"),
+        (83, DARK_ORANGE, "83% Mittel 6kW"),
+        (90, "#bf360c", "90% Langsam 6kW"),
+    ]
+    for y_val, col, lbl in schwellen:
+        ax3.axhline(y_val, color=col, lw=1.0, ls="--", alpha=0.7, zorder=3)
+        ax3.text(n_rows * 1.005, y_val, lbl, fontsize=7, color=col,
+                 va="center", ha="left", clip_on=False)
+
+    # X-Achse: max. 12 Beschriftungen
+    if n_rows > 0:
+        tick_step = max(1, n_rows // 12)
+        tick_idx  = list(range(0, n_rows, tick_step))
+        ax3.set_xticks(tick_idx)
+        ax3.set_xticklabels([zeiten[i] for i in tick_idx], fontsize=8, rotation=45)
+
+    ax3.set_xlim(0, max(1, n_rows - 1))
+    ax3.set_ylim(0, 105)
+    ax3.set_ylabel("SOC (%)", fontsize=10)
+    ax3.set_title("③ SOC-Verlauf Normalbetrieb (06:00 → erstes SOC=100%)",
+                  fontsize=11, fontweight="bold")
+    ax3.grid(True, alpha=0.2, linestyle="--")
+
+    buf = io.BytesIO()
+    plt.savefig(buf, dpi=120, bbox_inches="tight", facecolor="#f8f8f8")
+    plt.close()
+    buf.seek(0)
+    print("✅ Laderate-Analyse erstellt.")
+    return buf.read()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # TAGESBERICHTE
 # ═══════════════════════════════════════════════════════════════════════════════
 def erstelle_morgenreport_text(status: dict) -> tuple:
@@ -2017,8 +2209,9 @@ def verarbeite_tagesberichte(status: dict) -> None:
         print(f"ℹ️  Energiedaten-Quelle: {quelle}")
         png_bytes  = erstelle_tagesdiagramm(status)
         png_bytes2 = erstelle_regeldiagramm()
+        png_bytes3 = erstelle_laderate_diagramm(status)
         betreff, text = erstelle_abendreport_text(status, energie)
-        sende_email_mit_anhang(betreff, text, png_bytes, png_bytes2)
+        sende_email_mit_anhang(betreff, text, png_bytes, png_bytes2, png_bytes3)
         status["abendreport_datum"] = heute_str
         print("✅ Abend-Report gesendet.")
 
@@ -2076,6 +2269,19 @@ def main() -> None:
     # SOC-Verlauf + Tages-Verlauf aktualisieren (immer, auch bei Pause)
     status["soc_verlauf"] = aktualisiere_soc_verlauf(status, daten["batterie_prozent"])
     aktualisiere_tages_verlauf(status, daten)
+
+    # Laderate-Verlauf: nur im Normalbetrieb (solange SOC heute noch nicht 100% erreicht hat)
+    if not status.get("batterie_war_voll", False):
+        _lr  = berechne_laderate(status["soc_verlauf"])
+        _ev  = status.get("laderate_verlauf", [])
+        _ev.append({
+            "zeit":        lokal_jetzt().strftime("%H:%M"),
+            "soc":         daten["batterie_prozent"],
+            "ueberschuss": daten["ueberschuss_w"],
+            "laderate":    round(_lr, 1) if _lr is not None else None,
+            "n_punkte":    len(status["soc_verlauf"]),
+        })
+        status["laderate_verlauf"] = _ev
 
     # Offizielle iSolarCloud Tagesdaten speichern (für Abend-Report)
     if daten.get("tages_energie"):
