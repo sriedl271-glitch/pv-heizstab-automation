@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 100,
-      "zeit": "2026-04-24T13:10:28.065101"
-    },
-    {
-      "soc": 100,
       "zeit": "2026-04-24T13:15:29.764348"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 100,
       "zeit": "2026-04-24T14:05:25.648866"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-04-24T14:10:33.623815"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-04-24T08:06:09.207439",
-  "letzte_aktualisierung": "2026-04-24T14:05:36.294155",
+  "letzte_aktualisierung": "2026-04-24T14:10:46.376792",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-24",
   "tages_verlauf": [
@@ -1406,6 +1406,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 0,
       "ueberschuss_w": 4364
+    },
+    {
+      "zeit": "16:10",
+      "soc": 100,
+      "pv_w": 7756,
+      "haus_w": 740,
+      "einspeisung_w": 7016,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 7016
     }
   ],
   "schaltpunkte_heute": [
@@ -1427,20 +1438,20 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 71.7,
-    "einspeisung_kwh": 7.1,
+    "pv_kwh": 72.4,
+    "einspeisung_kwh": 7.5,
     "netzbezug_kwh": 0.8,
     "bat_laden_kwh": 8.6,
     "bat_entladen_kwh": 3.8,
-    "haus_kwh": 60.6
+    "haus_kwh": 60.9
   },
   "morgenreport_datum": "2026-04-24",
   "abendreport_datum": "2026-04-23",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 45,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": true,
-  "modus_6kw": "HOCHSPEICHER",
+  "heizstab_6kw_ein": false,
+  "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
   "nach_ausschalt_sperre_6kw": false,
@@ -1448,5 +1459,5 @@
   "abschalt_pruefung_datum": "2026-04-23",
   "ausschalt_pending_6kw": null,
   "batterie_war_voll": true,
-  "manuell_sperre_6kw_bis": null
+  "manuell_sperre_6kw_bis": "2026-04-24T16:10:44.614801"
 }
