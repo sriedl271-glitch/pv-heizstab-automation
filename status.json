@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 100,
-      "zeit": "2026-04-25T13:30:35.449327"
-    },
-    {
       "soc": 99,
       "zeit": "2026-04-25T13:35:25.675403"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 100,
       "zeit": "2026-04-25T14:25:27.022120"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-04-25T14:30:37.257259"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-04-25T08:51:08.379449",
-  "letzte_aktualisierung": "2026-04-25T14:25:37.511789",
+  "letzte_aktualisierung": "2026-04-25T14:30:49.860060",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-25",
   "tages_verlauf": [
@@ -1450,6 +1450,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3702
+    },
+    {
+      "zeit": "16:30",
+      "soc": 100,
+      "pv_w": 7079,
+      "haus_w": 3560,
+      "einspeisung_w": 3519,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3519
     }
   ],
   "schaltpunkte_heute": [
@@ -1471,20 +1482,20 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 72.9,
-    "einspeisung_kwh": 8.8,
+    "pv_kwh": 73.5,
+    "einspeisung_kwh": 9.2,
     "netzbezug_kwh": 0.4,
     "bat_laden_kwh": 11.4,
     "bat_entladen_kwh": 3.7,
-    "haus_kwh": 56.8
+    "haus_kwh": 57.0
   },
   "morgenreport_datum": "2026-04-25",
   "abendreport_datum": "2026-04-24",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 45,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": true,
-  "modus_6kw": "HOCHSPEICHER",
+  "heizstab_6kw_ein": false,
+  "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
   "nach_ausschalt_sperre_6kw": false,
@@ -1492,7 +1503,7 @@
   "abschalt_pruefung_datum": "2026-04-24",
   "ausschalt_pending_6kw": null,
   "batterie_war_voll": true,
-  "manuell_sperre_6kw_bis": null,
+  "manuell_sperre_6kw_bis": "2026-04-25T16:30:47.865953",
   "manuell_sperre_3kw_bis": null,
   "laderate_verlauf": [
     {
