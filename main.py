@@ -492,8 +492,16 @@ def _extrahiere_geraetezustand(device_data: list) -> dict:
     zustand = {"3kw_ein": None, "6kw_ein": None}
     for geraet in device_data:
         gid = geraet.get("id")
+        if gid not in (GERAET_3KW, GERAET_6KW):
+            continue
+        name = "3kW" if gid == GERAET_3KW else "6kW"
         for ep in geraet.get("endpoints", []):
+            ep_id = ep.get("id")
             for dp in ep.get("data", []):
+                # DIAGNOSE: alle Datenpunkte loggen um Schalt-Befehl-Signal zu finden
+                print(f"   [TYDOM-DIAGNOSE] {name} ep={ep_id} | "
+                      f"name={dp.get('name')} | value={dp.get('value')} | "
+                      f"validity={dp.get('validity')}")
                 if dp.get("name") == "level" and dp.get("validity") == "upToDate":
                     ist_ein = float(dp.get("value", 0)) >= 50
                     if gid == GERAET_6KW:
@@ -949,6 +957,14 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
             return False, ""
         return False, ""
 
+    # ── Nach Cutover, batterie_war_voll=True → feste AUS-Schwelle 70% ─────────
+    if status.get("batterie_war_voll", False):
+        if netzbezug > 2000:
+            return True, "Netz"
+        if soc < 70:
+            return True, "SOC<70%"
+        return False, ""
+
     # ── Normalbetrieb ─────────────────────────────────────────────────────────
     if netzbezug > 2000:
         return True, "Netz"
@@ -1015,6 +1031,14 @@ def pruefe_6kw_ausschalten(daten: dict, status: dict) -> tuple:
         if netzbezug > netz_grenze:
             return True, f"Netz>{netz_grenze}W"
         # SOC-Grenze (PV-Bedingung entfällt – Batterie liefert Energie)
+        if soc < 80:
+            return True, "SOC<80%"
+        return False, ""
+
+    # ── Nach Cutover, batterie_war_voll=True → feste AUS-Schwelle 80% ─────────
+    if status.get("batterie_war_voll", False):
+        if netzbezug > 2000:
+            return True, "Netz"
         if soc < 80:
             return True, "SOC<80%"
         return False, ""
