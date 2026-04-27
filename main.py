@@ -1,6 +1,7 @@
 """
-PV-Heizstab-Automation – Hauptscript v2.2
+PV-Heizstab-Automation – Hauptscript v2.9
 TYDOM-Steuerung via PUT + Schaltlogik + Morgen-/Abend-Report mit Tagesdiagramm
+v2.9: Saisonale Abschaltzeiten, Thermostat-Pause (Entlade-Betrieb), getrennte 6kW-Cutover-Zeit
 """
 import asyncio
 import hashlib
@@ -104,6 +105,9 @@ ABSCHALT_FENSTER_MIN  = 10  # Abschalt-Prüfung nur in den ersten 10 Min nach 22
 # Pending-Fenster (SOC unter AUS-Schwelle): strengere Grenze
 ENTLADE_NETZ_HOCHSPEICHER = 2000  # W – Netzbezug-Grenze in der Hochspeicher-Phase
 ENTLADE_NETZ_NORMAL       = 800   # W – Netzbezug-Grenze im Pending-Fenster / untere SOC-Zone
+
+# Thermostat-Pause: erkannte interne Thermostat-Abschaltung im Entlade-Betrieb
+THERMOSTAT_PAUSE_MINUTEN = 20     # Minuten Pause nach Thermostat-Abschaltung (kein 2h-Lock)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -498,10 +502,6 @@ def _extrahiere_geraetezustand(device_data: list) -> dict:
         for ep in geraet.get("endpoints", []):
             ep_id = ep.get("id")
             for dp in ep.get("data", []):
-                # DIAGNOSE: alle Datenpunkte loggen um Schalt-Befehl-Signal zu finden
-                print(f"   [TYDOM-DIAGNOSE] {name} ep={ep_id} | "
-                      f"name={dp.get('name')} | value={dp.get('value')} | "
-                      f"validity={dp.get('validity')}")
                 if dp.get("name") == "level" and dp.get("validity") == "upToDate":
                     ist_ein = float(dp.get("value", 0)) >= 50
                     if gid == GERAET_6KW:
@@ -780,35 +780,109 @@ def ist_pending_bestaetigt(pending_seit: str, sekunden: int = PENDING_EIN_SEKUND
     except Exception:
         return False
 
-def get_aus_pending_cutover() -> int:
-    """Cutover-Stunde (CEST) ab der das AUS-Pending von 20 Min auf 10 Min reduziert wird.
-    Winter (Nov-Mär): 16:00 | Frühling/Herbst (Apr+Okt): 17:00 | Sommer (Mai-Sep): 18:00
+def lokal_minuten() -> int:
+    """Minuten seit Mitternacht in CEST (0–1439)."""
+    lokal = lokal_jetzt()
+    return lokal.hour * 60 + lokal.minute
+
+def get_cutover_minuten_6kw() -> int:
+    """Cutover-Zeit für 6kW in Minuten seit Mitternacht CEST (Minute-Genauigkeit).
+    Winter (Nov-Mär): 13:30 = 810 Min | Frühling/Herbst (Apr+Okt): 15:30 = 930 Min
     """
     monat = lokal_jetzt().month
     if monat in [11, 12, 1, 2, 3]:
-        return 16
+        return 810   # 13:30
+    return 930       # 15:30
+
+def get_aus_pending_cutover() -> int:
+    """Cutover-Stunde (CEST) für 3kW – ab hier AUS-Pending 10 Min.
+    Winter (Nov-Mär): 15:00 | Frühling/Herbst (Apr+Okt): 17:00 | Sommer (Mai-Sep): 18:00
+    """
+    monat = lokal_jetzt().month
+    if monat in [11, 12, 1, 2, 3]:
+        return 15
     elif monat in [4, 10]:
         return 17
     else:
         return 18
 
 def get_aus_pending_sekunden() -> int:
-    """Gibt die aktuelle AUS-Pending-Zeit zurück.
-    Vor Cutover: 20 Min (4 Zyklen, verhindert Flackern tagsüber).
-    Ab Cutover:  10 Min (2 Zyklen, schnelle Reaktion bei sinkender PV).
+    """Gibt die aktuelle AUS-Pending-Zeit zurück (3kW-Cutover-Zeit).
+    Vor Cutover: 10 Min (Testwert).
+    Ab Cutover:  10 Min.
     """
     if lokal_jetzt().hour >= get_aus_pending_cutover():
-        return PENDING_AUS_SEKUNDEN   # 480s = 10 Min (2 Zyklen)
-    return PENDING_EIN_SEKUNDEN       # 780s = 20 Min (4 Zyklen)
+        return PENDING_AUS_SEKUNDEN
+    return PENDING_AUS_SEKUNDEN
+
+def get_abschaltzeit_minuten_3kw() -> int:
+    """Saisonale Abschaltzeit 3kW in Minuten seit Mitternacht CEST.
+    Winter (Nov-Mär): 15:30=930 | Frühling/Herbst (Apr+Okt): 18:30=1110 | Sommer (Mai-Sep): 20:30=1230
+    """
+    monat = lokal_jetzt().month
+    if monat in [11, 12, 1, 2, 3]:
+        return 930   # 15:30
+    elif monat in [4, 10]:
+        return 1110  # 18:30
+    else:
+        return 1230  # 20:30
+
+def get_abschaltzeit_minuten_6kw() -> int:
+    """Saisonale Abschaltzeit 6kW in Minuten seit Mitternacht CEST.
+    Winter (Nov-Mär): 14:30=870 | Frühling/Herbst (Apr+Okt): 16:30=990
+    """
+    monat = lokal_jetzt().month
+    if monat in [11, 12, 1, 2, 3]:
+        return 870   # 14:30
+    return 990       # 16:30
 
 def ist_entlade_betrieb(status: dict) -> bool:
-    """True wenn Hochspeicher-Entlade-Betrieb aktiv:
-    Batterie war heute mindestens einmal bei 100% UND wir sind vor der saisonalen Cutover-Zeit.
-    In diesem Modus dürfen Heizstäbe auf Batterieentladung laufen (kein PV-Minimum).
+    """True wenn Hochspeicher-Entlade-Betrieb aktiv (3kW):
+    Batterie war heute mindestens einmal bei 100% UND wir sind vor der 3kW-Cutover-Zeit.
     """
     if not status.get("batterie_war_voll", False):
         return False
     return lokal_jetzt().hour < get_aus_pending_cutover()
+
+def ist_entlade_betrieb_6kw(status: dict) -> bool:
+    """True wenn Hochspeicher-Entlade-Betrieb für 6kW aktiv:
+    Batterie war heute mindestens einmal bei 100% UND wir sind vor der 6kW-Cutover-Zeit (früher als 3kW).
+    """
+    if not status.get("batterie_war_voll", False):
+        return False
+    return lokal_minuten() < get_cutover_minuten_6kw()
+
+def ist_thermostat_pausiert_3kw(status: dict) -> bool:
+    """True wenn 3kW gerade in 20-Min-Thermostat-Pause (nur im Entlade-Betrieb gesetzt)."""
+    pause = status.get("thermostat_pause_3kw_bis")
+    if not pause:
+        return False
+    try:
+        bis = datetime.fromisoformat(pause)
+        if datetime.utcnow() < bis:
+            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            print(f"⏸️  3kW Thermostat-Pause bis {bis_lokal.strftime('%H:%M')} Uhr")
+            return True
+        status["thermostat_pause_3kw_bis"] = None
+    except Exception:
+        status["thermostat_pause_3kw_bis"] = None
+    return False
+
+def ist_thermostat_pausiert_6kw(status: dict) -> bool:
+    """True wenn 6kW gerade in 20-Min-Thermostat-Pause (nur im Entlade-Betrieb gesetzt)."""
+    pause = status.get("thermostat_pause_6kw_bis")
+    if not pause:
+        return False
+    try:
+        bis = datetime.fromisoformat(pause)
+        if datetime.utcnow() < bis:
+            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            print(f"⏸️  6kW Thermostat-Pause bis {bis_lokal.strftime('%H:%M')} Uhr")
+            return True
+        status["thermostat_pause_6kw_bis"] = None
+    except Exception:
+        status["thermostat_pause_6kw_bis"] = None
+    return False
 
 def ist_betriebszeit() -> bool:
     """Prüft ob aktuell Betriebszeit (06:00 – 22:00 Uhr CEST) ist."""
@@ -991,8 +1065,8 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
     pv          = daten["pv_leistung_w"]
     ueberschuss = daten["ueberschuss_w"]
 
-    # ── Entlade-Betrieb: nur Hochspeicher-Regel ───────────────────────────────
-    if ist_entlade_betrieb(status):
+    # ── Entlade-Betrieb 6kW: nur Hochspeicher-Regel (vor 6kW-Cutover) ────────
+    if ist_entlade_betrieb_6kw(status):
         if soc >= 90 and pv >= 4000:
             return True, "HOCHSPEICHER", False, None
         return False, None, False, None
@@ -1025,8 +1099,8 @@ def pruefe_6kw_ausschalten(daten: dict, status: dict) -> tuple:
     modus              = status.get("modus_6kw", "NORMAL")
     einschalt_schwelle = status.get("einschalt_schwelle_6kw")
 
-    # ── Hochspeicher-Entlade-Betrieb (batterie_war_voll=True, vor Cutover) ───
-    if ist_entlade_betrieb(status):
+    # ── Hochspeicher-Entlade-Betrieb 6kW (batterie_war_voll=True, vor 6kW-Cutover) ──
+    if ist_entlade_betrieb_6kw(status):
         netz_grenze = ENTLADE_NETZ_HOCHSPEICHER if soc >= 80 else ENTLADE_NETZ_NORMAL
         if netzbezug > netz_grenze:
             return True, f"Netz>{netz_grenze}W"
@@ -1084,6 +1158,10 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
         status["einschalt_schwelle_3kw"]    = None
         status["einschalt_schwelle_6kw"]    = None
         status["batterie_war_voll"]         = False
+        status["thermostat_pause_3kw_bis"]  = None
+        status["thermostat_pause_6kw_bis"]  = None
+        status["saisonale_abschaltung_3kw"] = None
+        status["saisonale_abschaltung_6kw"] = None
         print("ℹ️  Tageswechsel: alle Einschalt-Sperren zurückgesetzt")
     status["schaltungen_heute"] = schaltungen
 
@@ -1105,7 +1183,17 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
     if tydom_3kw != ist_3kw_ein:
         if not tydom_3kw and ist_3kw_ein:
             if schalt_kuerzlich:
-                print("ℹ️  3kW AUS nach Schaltbefehl – kein 2h-Lock")
+                print("ℹ️  3kW AUS nach Schaltbefehl – kein Lock")
+            elif ist_entlade_betrieb(status):
+                # Thermostat-Abschaltung im Entlade-Betrieb: 20-Min-Pause statt 2h-Lock
+                pause_bis = (datetime.utcnow() + timedelta(minutes=THERMOSTAT_PAUSE_MINUTEN)).isoformat()
+                status["thermostat_pause_3kw_bis"] = pause_bis
+                status["modus_3kw"] = None
+                bis_lokal = (datetime.utcnow() + timedelta(
+                    minutes=THERMOSTAT_PAUSE_MINUTEN, hours=CEST_OFFSET)).strftime("%H:%M")
+                msg = f"🌡️ 3kW Thermostat-Abschaltung erkannt – 20 Min Pause (bis {bis_lokal} Uhr)"
+                print(msg)
+                benachrichtige("PV Heizstab – Thermostat 3kW", msg)
             else:
                 bis_lokal = (datetime.utcnow() + timedelta(hours=2+CEST_OFFSET)).strftime("%H:%M")
                 status["manuell_sperre_3kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
@@ -1119,7 +1207,17 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
     if tydom_6kw != ist_6kw_ein:
         if not tydom_6kw and ist_6kw_ein:
             if schalt_kuerzlich:
-                print("ℹ️  6kW AUS nach Schaltbefehl – kein 2h-Lock")
+                print("ℹ️  6kW AUS nach Schaltbefehl – kein Lock")
+            elif ist_entlade_betrieb_6kw(status):
+                # Thermostat-Abschaltung im Entlade-Betrieb: 20-Min-Pause statt 2h-Lock
+                pause_bis = (datetime.utcnow() + timedelta(minutes=THERMOSTAT_PAUSE_MINUTEN)).isoformat()
+                status["thermostat_pause_6kw_bis"] = pause_bis
+                status["modus_6kw"] = None
+                bis_lokal = (datetime.utcnow() + timedelta(
+                    minutes=THERMOSTAT_PAUSE_MINUTEN, hours=CEST_OFFSET)).strftime("%H:%M")
+                msg = f"🌡️ 6kW Thermostat-Abschaltung erkannt – 20 Min Pause (bis {bis_lokal} Uhr)"
+                print(msg)
+                benachrichtige("PV Heizstab – Thermostat 6kW", msg)
             else:
                 bis_lokal = (datetime.utcnow() + timedelta(hours=2+CEST_OFFSET)).strftime("%H:%M")
                 status["manuell_sperre_6kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
@@ -1144,11 +1242,55 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
         status["batterie_war_voll"] = True
         print("ℹ️  Batterie erstmals 100% – Hochspeicher-Entlade-Betrieb aktiviert (bis Cutover)")
 
+    # Entlade-Betrieb: getrennt für 3kW (3kW-Cutover) und 6kW (6kW-Cutover, früher)
+    entlade_betrieb     = ist_entlade_betrieb(status)
+    entlade_betrieb_6kw = ist_entlade_betrieb_6kw(status)
+
     # AUS-Pending: im Entlade-Betrieb immer 10 Min (kein saisonales 20-Min-Pending)
-    entlade_betrieb = ist_entlade_betrieb(status)
-    aus_pending_sek = PENDING_AUS_SEKUNDEN if entlade_betrieb else get_aus_pending_sekunden()
+    aus_pending_sek_3kw = PENDING_AUS_SEKUNDEN if entlade_betrieb     else get_aus_pending_sekunden()
+    aus_pending_sek_6kw = PENDING_AUS_SEKUNDEN if entlade_betrieb_6kw else get_aus_pending_sekunden()
     if entlade_betrieb:
-        print(f"ℹ️  Hochspeicher-Entlade-Betrieb aktiv (AUS-Pending: 10 Min)")
+        print(f"ℹ️  Hochspeicher-Entlade-Betrieb aktiv 3kW (AUS-Pending: 10 Min)")
+    if entlade_betrieb_6kw:
+        print(f"ℹ️  Hochspeicher-Entlade-Betrieb aktiv 6kW (AUS-Pending: 10 Min)")
+
+    # ── Saisonale Abschaltzeit prüfen ────────────────────────────────────────
+    heute_str_lokal = lokal_jetzt().strftime("%Y-%m-%d")
+    min_jetzt = lokal_minuten()
+
+    if min_jetzt >= get_abschaltzeit_minuten_3kw():
+        if status.get("saisonale_abschaltung_3kw") != heute_str_lokal:
+            status["saisonale_abschaltung_3kw"] = heute_str_lokal
+            if ein_3kw:
+                szenarien.append(SCN_AUS_3KW)
+                erfasse_schaltpunkt(status, "3kw", "AUS", soc, pv_w, "Abschaltzeit")
+                status["heizstab_3kw_ein"]      = False
+                status["modus_3kw"]             = None
+                status["einschalt_pending_3kw"] = None
+                status["ausschalt_pending_3kw"] = None
+                schaltungen["aus_3kw"] += 1
+                ein_3kw = False
+                msg = f"🌙 3kW Abschaltzeit – Heizstab AUS bis morgen früh"
+                print(msg); meldungen.append(msg)
+            else:
+                print("ℹ️  3kW Abschaltzeit erreicht – war bereits AUS")
+
+    if ist_6kw_saison() and min_jetzt >= get_abschaltzeit_minuten_6kw():
+        if status.get("saisonale_abschaltung_6kw") != heute_str_lokal:
+            status["saisonale_abschaltung_6kw"] = heute_str_lokal
+            if ein_6kw:
+                szenarien.append(SCN_AUS_6KW)
+                erfasse_schaltpunkt(status, "6kw", "AUS", soc, pv_w, "Abschaltzeit")
+                status["heizstab_6kw_ein"]      = False
+                status["modus_6kw"]             = None
+                status["einschalt_pending_6kw"] = None
+                status["ausschalt_pending_6kw"] = None
+                schaltungen["aus_6kw"] += 1
+                ein_6kw = False
+                msg = f"🌙 6kW Abschaltzeit – Heizstab AUS bis morgen früh"
+                print(msg); meldungen.append(msg)
+            else:
+                print("ℹ️  6kW Abschaltzeit erreicht – war bereits AUS")
 
     # ── 6kW AUSSCHALTEN ──────────────────────────────────────────────────────
     if ein_6kw:
@@ -1157,7 +1299,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if not status.get("ausschalt_pending_6kw"):
                 status["ausschalt_pending_6kw"] = now_str
                 print(f"⏳ 6kW AUS ({aus_grund_6kw}): Pending")
-            elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), aus_pending_sek):
+            elif ist_pending_bestaetigt(status.get("ausschalt_pending_6kw"), aus_pending_sek_6kw):
                 print("🔴 6kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_6KW)
                 erfasse_schaltpunkt(status, "6kw", "AUS", soc, pv_w, aus_grund_6kw)
@@ -1188,7 +1330,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
             if not status.get("ausschalt_pending_3kw"):
                 status["ausschalt_pending_3kw"] = now_str
                 print(f"⏳ 3kW AUS ({aus_grund_3kw}): Pending")
-            elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), aus_pending_sek):
+            elif ist_pending_bestaetigt(status.get("ausschalt_pending_3kw"), aus_pending_sek_3kw):
                 print("🔴 3kW wird AUSGESCHALTET")
                 szenarien.append(SCN_AUS_3KW)
                 erfasse_schaltpunkt(status, "3kw", "AUS", soc, pv_w, aus_grund_3kw)
@@ -1214,72 +1356,132 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     # ── 3kW EINSCHALTEN ──────────────────────────────────────────────────────
     if not ein_3kw and not ist_manuell_pausiert_3kw(status):
-        soll_ein, modus, sofort, einschalt_soc_min_3kw = pruefe_3kw_einschalten(daten, status, laderate)
-        # Entlade-Betrieb: 10 Min Pending, sonst 20 Min
-        ein_pending_3kw_sek = PENDING_AUS_SEKUNDEN if entlade_betrieb else PENDING_EIN_SEKUNDEN
-        if soll_ein:
-            if sofort:
-                print("🟢 3kW sofort EIN (Einspeisung-Stopp)")
-                szenarien.append(SCN_EIN_3KW)
-                erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
-                status["heizstab_3kw_ein"]          = True
-                status["modus_3kw"]                 = modus
-                status["einschalt_pending_3kw"]     = None
-                status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
-                status["nach_ausschalt_sperre_3kw"] = False
-                schaltungen["ein_3kw"] += 1
-                meldungen.append(
-                    f"🟢 3kW EIN (Einspeisung-Stopp)\n"
-                    f"SOC: {soc}% | PV: {pv_w}W | "
-                    f"Einspeisung: {daten.get('einspeisung_w',0)}W")
-            else:
-                if not status.get("einschalt_pending_3kw"):
-                    status["einschalt_pending_3kw"] = now_str
-                    print(f"⏳ 3kW EIN ({modus}): Pending")
-                elif ist_pending_bestaetigt(status.get("einschalt_pending_3kw"), ein_pending_3kw_sek):
-                    print(f"🟢 3kW wird EINGESCHALTET ({modus})")
-                    szenarien.append(SCN_EIN_3KW)
-                    erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
-                    status["heizstab_3kw_ein"]          = True
-                    status["modus_3kw"]                 = modus
-                    status["einschalt_pending_3kw"]     = None
-                    status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
-                    status["nach_ausschalt_sperre_3kw"] = False
-                    schaltungen["ein_3kw"] += 1
-                    meldungen.append(
-                        f"🟢 3kW EIN ({modus})\n"
-                        f"SOC: {soc}% | Laderate: {laderate_str} | Überschuss: {ueberschuss}W")
-        else:
+        if status.get("saisonale_abschaltung_3kw") == heute_str_lokal:
+            print("ℹ️  3kW Abschaltzeit – kein Einschalten bis morgen")
             if status.get("einschalt_pending_3kw"):
                 status["einschalt_pending_3kw"] = None
-                print("ℹ️  3kW EIN Pending geloescht")
+        else:
+            pause_3kw_war_gesetzt = bool(status.get("thermostat_pause_3kw_bis"))
+            thermostat_3kw_aktiv  = ist_thermostat_pausiert_3kw(status)
+            pause_3kw_abgelaufen  = pause_3kw_war_gesetzt and not thermostat_3kw_aktiv
+            if thermostat_3kw_aktiv:
+                if status.get("einschalt_pending_3kw"):
+                    status["einschalt_pending_3kw"] = None
+                    print("ℹ️  3kW EIN Pending geloescht (Thermostat-Pause)")
+            else:
+                soll_ein, modus, sofort, einschalt_soc_min_3kw = pruefe_3kw_einschalten(daten, status, laderate)
+                # Nach Thermostat-Pause im Entlade-Betrieb: sofort EIN ohne Pending
+                if soll_ein and pause_3kw_abgelaufen and entlade_betrieb:
+                    sofort = True
+                    modus  = modus or "HOCHSPEICHER"
+                # Entlade-Betrieb: 10 Min Pending, sonst 20 Min
+                ein_pending_3kw_sek = PENDING_AUS_SEKUNDEN if entlade_betrieb else PENDING_EIN_SEKUNDEN
+                if soll_ein:
+                    if sofort:
+                        if pause_3kw_abgelaufen:
+                            print("🟢 3kW sofort EIN (nach Thermostat-Pause)")
+                            szenarien.append(SCN_EIN_3KW)
+                            erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
+                            status["heizstab_3kw_ein"]          = True
+                            status["modus_3kw"]                 = modus
+                            status["einschalt_pending_3kw"]     = None
+                            status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
+                            status["nach_ausschalt_sperre_3kw"] = False
+                            schaltungen["ein_3kw"] += 1
+                            msg = f"🟢 3kW EIN nach Thermostat-Pause\nSOC: {soc}% | PV: {pv_w}W"
+                            print(msg)
+                            benachrichtige("PV Heizstab – Thermostat-Pause 3kW beendet", msg)
+                        else:
+                            print("🟢 3kW sofort EIN (Einspeisung-Stopp)")
+                            szenarien.append(SCN_EIN_3KW)
+                            erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
+                            status["heizstab_3kw_ein"]          = True
+                            status["modus_3kw"]                 = modus
+                            status["einschalt_pending_3kw"]     = None
+                            status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
+                            status["nach_ausschalt_sperre_3kw"] = False
+                            schaltungen["ein_3kw"] += 1
+                            meldungen.append(
+                                f"🟢 3kW EIN (Einspeisung-Stopp)\n"
+                                f"SOC: {soc}% | PV: {pv_w}W | "
+                                f"Einspeisung: {daten.get('einspeisung_w',0)}W")
+                    else:
+                        if not status.get("einschalt_pending_3kw"):
+                            status["einschalt_pending_3kw"] = now_str
+                            print(f"⏳ 3kW EIN ({modus}): Pending")
+                        elif ist_pending_bestaetigt(status.get("einschalt_pending_3kw"), ein_pending_3kw_sek):
+                            print(f"🟢 3kW wird EINGESCHALTET ({modus})")
+                            szenarien.append(SCN_EIN_3KW)
+                            erfasse_schaltpunkt(status, "3kw", "EIN", soc, pv_w, modus)
+                            status["heizstab_3kw_ein"]          = True
+                            status["modus_3kw"]                 = modus
+                            status["einschalt_pending_3kw"]     = None
+                            status["einschalt_schwelle_3kw"]    = einschalt_soc_min_3kw
+                            status["nach_ausschalt_sperre_3kw"] = False
+                            schaltungen["ein_3kw"] += 1
+                            meldungen.append(
+                                f"🟢 3kW EIN ({modus})\n"
+                                f"SOC: {soc}% | Laderate: {laderate_str} | Überschuss: {ueberschuss}W")
+                else:
+                    if status.get("einschalt_pending_3kw"):
+                        status["einschalt_pending_3kw"] = None
+                        print("ℹ️  3kW EIN Pending geloescht")
 
     # ── 6kW EINSCHALTEN ──────────────────────────────────────────────────────
     if not ein_6kw and not ist_manuell_pausiert_6kw(status):
-        soll_ein, modus, sofort, einschalt_soc_min_6kw = pruefe_6kw_einschalten(daten, status, laderate)
-        # Entlade-Betrieb oder Langsames Laden (SOC≥90): 10 Min Pending, sonst 20 Min
-        ein_pending_6kw_sek = PENDING_AUS_SEKUNDEN if (entlade_betrieb or einschalt_soc_min_6kw == 90) else PENDING_EIN_SEKUNDEN
-        if soll_ein:
-            if not status.get("einschalt_pending_6kw"):
-                status["einschalt_pending_6kw"] = now_str
-                print(f"⏳ 6kW EIN ({modus}): Pending")
-            elif ist_pending_bestaetigt(status.get("einschalt_pending_6kw"), ein_pending_6kw_sek):
-                print(f"🟢 6kW wird EINGESCHALTET ({modus})")
-                szenarien.append(SCN_EIN_6KW)
-                erfasse_schaltpunkt(status, "6kw", "EIN", soc, pv_w, modus)
-                status["heizstab_6kw_ein"]          = True
-                status["modus_6kw"]                 = modus
-                status["einschalt_pending_6kw"]     = None
-                status["einschalt_schwelle_6kw"]    = einschalt_soc_min_6kw
-                status["nach_ausschalt_sperre_6kw"] = False
-                schaltungen["ein_6kw"] += 1
-                meldungen.append(
-                    f"🟢 6kW EIN ({modus})\n"
-                    f"SOC: {soc}% | Laderate: {laderate_str} | Überschuss: {ueberschuss}W")
-        else:
+        if status.get("saisonale_abschaltung_6kw") == heute_str_lokal:
+            print("ℹ️  6kW Abschaltzeit – kein Einschalten bis morgen")
             if status.get("einschalt_pending_6kw"):
                 status["einschalt_pending_6kw"] = None
-                print("ℹ️  6kW EIN Pending geloescht")
+        else:
+            pause_6kw_war_gesetzt = bool(status.get("thermostat_pause_6kw_bis"))
+            thermostat_6kw_aktiv  = ist_thermostat_pausiert_6kw(status)
+            pause_6kw_abgelaufen  = pause_6kw_war_gesetzt and not thermostat_6kw_aktiv
+            if thermostat_6kw_aktiv:
+                if status.get("einschalt_pending_6kw"):
+                    status["einschalt_pending_6kw"] = None
+                    print("ℹ️  6kW EIN Pending geloescht (Thermostat-Pause)")
+            else:
+                soll_ein, modus, sofort, einschalt_soc_min_6kw = pruefe_6kw_einschalten(daten, status, laderate)
+                # Nach Thermostat-Pause im Entlade-Betrieb 6kW: sofort EIN ohne Pending
+                sofort_6kw = pause_6kw_abgelaufen and entlade_betrieb_6kw and soll_ein
+                # Entlade-Betrieb oder Langsames Laden (SOC≥90): 10 Min Pending, sonst 20 Min
+                ein_pending_6kw_sek = PENDING_AUS_SEKUNDEN if (entlade_betrieb_6kw or einschalt_soc_min_6kw == 90) else PENDING_EIN_SEKUNDEN
+                if soll_ein:
+                    if sofort_6kw:
+                        print("🟢 6kW sofort EIN (nach Thermostat-Pause)")
+                        szenarien.append(SCN_EIN_6KW)
+                        erfasse_schaltpunkt(status, "6kw", "EIN", soc, pv_w, modus)
+                        status["heizstab_6kw_ein"]          = True
+                        status["modus_6kw"]                 = modus
+                        status["einschalt_pending_6kw"]     = None
+                        status["einschalt_schwelle_6kw"]    = einschalt_soc_min_6kw
+                        status["nach_ausschalt_sperre_6kw"] = False
+                        schaltungen["ein_6kw"] += 1
+                        msg = f"🟢 6kW EIN nach Thermostat-Pause\nSOC: {soc}% | PV: {pv_w}W"
+                        print(msg)
+                        benachrichtige("PV Heizstab – Thermostat-Pause 6kW beendet", msg)
+                    else:
+                        if not status.get("einschalt_pending_6kw"):
+                            status["einschalt_pending_6kw"] = now_str
+                            print(f"⏳ 6kW EIN ({modus}): Pending")
+                        elif ist_pending_bestaetigt(status.get("einschalt_pending_6kw"), ein_pending_6kw_sek):
+                            print(f"🟢 6kW wird EINGESCHALTET ({modus})")
+                            szenarien.append(SCN_EIN_6KW)
+                            erfasse_schaltpunkt(status, "6kw", "EIN", soc, pv_w, modus)
+                            status["heizstab_6kw_ein"]          = True
+                            status["modus_6kw"]                 = modus
+                            status["einschalt_pending_6kw"]     = None
+                            status["einschalt_schwelle_6kw"]    = einschalt_soc_min_6kw
+                            status["nach_ausschalt_sperre_6kw"] = False
+                            schaltungen["ein_6kw"] += 1
+                            meldungen.append(
+                                f"🟢 6kW EIN ({modus})\n"
+                                f"SOC: {soc}% | Laderate: {laderate_str} | Überschuss: {ueberschuss}W")
+                else:
+                    if status.get("einschalt_pending_6kw"):
+                        status["einschalt_pending_6kw"] = None
+                        print("ℹ️  6kW EIN Pending geloescht")
 
     return szenarien, meldungen
 
