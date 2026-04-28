@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 87,
-      "zeit": "2026-04-28T08:20:38.515450"
-    },
-    {
-      "soc": 87,
       "zeit": "2026-04-28T08:25:26.238782"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 95,
       "zeit": "2026-04-28T09:15:31.955262"
+    },
+    {
+      "soc": 96,
+      "zeit": "2026-04-28T09:20:33.424224"
     }
   ],
   "schaltungen_heute": {
@@ -56,12 +56,12 @@
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": false,
+  "heizstab_3kw_ein": true,
   "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-04-27T16:31:15.554695",
-  "letzte_aktualisierung": "2026-04-28T09:15:46.376025",
+  "letzte_aktualisierung": "2026-04-28T09:20:44.544241",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-28",
   "tages_verlauf": [
@@ -768,23 +768,34 @@
       "bat_laden_w": 2237,
       "bat_entladen_w": 0,
       "ueberschuss_w": 2222
+    },
+    {
+      "zeit": "11:20",
+      "soc": 96,
+      "pv_w": 9596,
+      "haus_w": 7800,
+      "einspeisung_w": 0,
+      "netzbezug_w": 147,
+      "bat_laden_w": 1943,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 1796
     }
   ],
   "schaltpunkte_heute": [],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 22.6,
+    "pv_kwh": 23.5,
     "einspeisung_kwh": 0.0,
     "netzbezug_kwh": 0.2,
-    "bat_laden_kwh": 6.4,
+    "bat_laden_kwh": 6.6,
     "bat_entladen_kwh": 3.0,
-    "haus_kwh": 19.4
+    "haus_kwh": 20.1
   },
   "morgenreport_datum": "2026-04-28",
   "abendreport_datum": "2026-04-27",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": null,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": false,
+  "heizstab_6kw_ein": true,
   "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
@@ -1235,6 +1246,13 @@
       "soc": 95,
       "ueberschuss": 2222,
       "laderate": 8.7,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "11:20",
+      "soc": 96,
+      "ueberschuss": 1796,
+      "laderate": 9.8,
       "n_punkte": 12
     }
   ],
