@@ -998,11 +998,11 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
             return True, "NORMAL", False, 75
         return False, None, False, None
 
-    if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 3000:
+    if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 2000:
         return True, "NORMAL", False, 45
-    if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 3000:
+    if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 2000:
         return True, "NORMAL", False, 60
-    if laderate > 0  and soc >= 75 and ueberschuss >= 3000:
+    if laderate > 0  and soc >= 75 and ueberschuss >= 2000:
         return True, "NORMAL", False, 75
 
     return False, None, False, None
@@ -1081,9 +1081,9 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
             return True, "NORMAL", False, 90
         return False, None, False, None
 
-    if laderate >= 20 and soc >= 75 and ueberschuss >= 6300:
+    if laderate >= 20 and soc >= 75 and ueberschuss >= 4000:
         return True, "NORMAL", False, 75
-    if laderate >= 15 and soc >= 83 and ueberschuss >= 5000:
+    if laderate >= 15 and soc >= 83 and ueberschuss >= 4000:
         return True, "NORMAL", False, 83
     if laderate > 0  and soc >= 90 and ueberschuss >= 4000:
         return True, "NORMAL", False, 90
