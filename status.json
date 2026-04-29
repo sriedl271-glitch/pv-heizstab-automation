@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 66,
-      "zeit": "2026-04-29T06:25:27.125381"
-    },
-    {
       "soc": 69,
       "zeit": "2026-04-29T06:30:47.577676"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 80,
       "zeit": "2026-04-29T07:20:34.166799"
+    },
+    {
+      "soc": 79,
+      "zeit": "2026-04-29T07:25:29.107238"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-04-29T06:36:17.089991",
-  "letzte_aktualisierung": "2026-04-29T07:20:44.383524",
+  "letzte_aktualisierung": "2026-04-29T07:25:39.140107",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-29",
   "tages_verlauf": [
@@ -515,6 +515,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 3262,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "09:25",
+      "soc": 79,
+      "pv_w": 6654,
+      "haus_w": 10981,
+      "einspeisung_w": 0,
+      "netzbezug_w": 1192,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 3135,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -536,12 +547,12 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 9.8,
+    "pv_kwh": 10.3,
     "einspeisung_kwh": 0.0,
-    "netzbezug_kwh": 0.2,
+    "netzbezug_kwh": 0.3,
     "bat_laden_kwh": 5.7,
-    "bat_entladen_kwh": 3.6,
-    "haus_kwh": 7.9
+    "bat_entladen_kwh": 3.9,
+    "haus_kwh": 8.8
   },
   "morgenreport_datum": "2026-04-29",
   "abendreport_datum": "2026-04-28",
@@ -555,7 +566,7 @@
   "nach_ausschalt_sperre_6kw": false,
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-04-28",
-  "ausschalt_pending_6kw": null,
+  "ausschalt_pending_6kw": "2026-04-29T07:25:39.140001",
   "batterie_war_voll": false,
   "manuell_sperre_6kw_bis": null,
   "manuell_sperre_3kw_bis": null,
@@ -838,6 +849,13 @@
       "soc": 80,
       "ueberschuss": 0,
       "laderate": 15.2,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "09:25",
+      "soc": 79,
+      "ueberschuss": 0,
+      "laderate": 11.0,
       "n_punkte": 12
     }
   ],
