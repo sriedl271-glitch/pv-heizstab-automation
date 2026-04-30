@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 60,
-      "zeit": "2026-04-30T05:35:24.006546"
-    },
-    {
       "soc": 62,
       "zeit": "2026-04-30T05:40:34.200355"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 80,
       "zeit": "2026-04-30T06:30:37.724181"
+    },
+    {
+      "soc": 83,
+      "zeit": "2026-04-30T06:35:30.223346"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-04-30",
     "ein_3kw": 1,
     "aus_3kw": 0,
-    "ein_6kw": 0,
+    "ein_6kw": 1,
     "aus_6kw": 0
   },
   "heizstab_3kw_ein": true,
   "modus_3kw": "NORMAL",
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-04-30T06:26:11.304068",
-  "letzte_aktualisierung": "2026-04-30T06:30:49.403721",
+  "letzte_schaltzeit": "2026-04-30T06:36:13.056364",
+  "letzte_aktualisierung": "2026-04-30T06:36:15.071831",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-04-30",
   "tages_verlauf": [
@@ -405,6 +405,17 @@
       "bat_laden_w": 4882,
       "bat_entladen_w": 0,
       "ueberschuss_w": 4843
+    },
+    {
+      "zeit": "08:35",
+      "soc": 83,
+      "pv_w": 5494,
+      "haus_w": 505,
+      "einspeisung_w": 0,
+      "netzbezug_w": 3,
+      "bat_laden_w": 4992,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 4989
     }
   ],
   "schaltpunkte_heute": [
@@ -415,25 +426,33 @@
       "soc": 78,
       "pv_w": 5163,
       "modus": "NORMAL"
+    },
+    {
+      "zeit": "08:35",
+      "geraet": "6kw",
+      "aktion": "EIN",
+      "soc": 83,
+      "pv_w": 5494,
+      "modus": "NORMAL"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 5.3,
+    "pv_kwh": 5.7,
     "einspeisung_kwh": 0.0,
     "netzbezug_kwh": 0.1,
-    "bat_laden_kwh": 4.1,
+    "bat_laden_kwh": 4.5,
     "bat_entladen_kwh": 2.9,
     "haus_kwh": 4.2
   },
   "morgenreport_datum": "2026-04-30",
   "abendreport_datum": "2026-04-29",
-  "einschalt_pending_6kw": "2026-04-30T06:25:41.942393",
+  "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 75,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": false,
-  "modus_6kw": null,
+  "heizstab_6kw_ein": true,
+  "modus_6kw": "NORMAL",
   "soc_abschaltung_6kw": false,
-  "einschalt_schwelle_6kw": null,
+  "einschalt_schwelle_6kw": 75,
   "nach_ausschalt_sperre_6kw": false,
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-04-29",
@@ -650,6 +669,13 @@
       "soc": 80,
       "ueberschuss": 4843,
       "laderate": 21.7,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "08:35",
+      "soc": 83,
+      "ueberschuss": 4989,
+      "laderate": 22.9,
       "n_punkte": 12
     }
   ],
