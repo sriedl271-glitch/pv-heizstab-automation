@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 78,
-      "zeit": "2026-04-30T06:25:31.520053"
-    },
-    {
       "soc": 80,
       "zeit": "2026-04-30T06:30:37.724181"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 75,
       "zeit": "2026-04-30T07:20:44.100476"
+    },
+    {
+      "soc": 74,
+      "zeit": "2026-04-30T07:25:35.927917"
     }
   ],
   "schaltungen_heute": {
@@ -61,8 +61,8 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-04-30T06:36:13.056364",
-  "letzte_aktualisierung": "2026-04-30T07:20:55.143502",
-  "ausschalt_pending_3kw": null,
+  "letzte_aktualisierung": "2026-04-30T07:25:47.220960",
+  "ausschalt_pending_3kw": "2026-04-30T07:25:47.220868",
   "tages_datum": "2026-04-30",
   "tages_verlauf": [
     {
@@ -515,6 +515,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 2200,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "09:25",
+      "soc": 74,
+      "pv_w": 6936,
+      "haus_w": 8980,
+      "einspeisung_w": 0,
+      "netzbezug_w": 5,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 2039,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -536,12 +547,12 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 10.3,
+    "pv_kwh": 10.9,
     "einspeisung_kwh": 0.0,
     "netzbezug_kwh": 0.1,
     "bat_laden_kwh": 5.0,
-    "bat_entladen_kwh": 4.5,
-    "haus_kwh": 9.9
+    "bat_entladen_kwh": 4.7,
+    "haus_kwh": 10.7
   },
   "morgenreport_datum": "2026-04-30",
   "abendreport_datum": "2026-04-29",
@@ -555,7 +566,7 @@
   "nach_ausschalt_sperre_6kw": false,
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-04-29",
-  "ausschalt_pending_6kw": null,
+  "ausschalt_pending_6kw": "2026-04-30T07:25:47.220868",
   "batterie_war_voll": false,
   "manuell_sperre_6kw_bis": null,
   "manuell_sperre_3kw_bis": null,
@@ -838,6 +849,13 @@
       "soc": 75,
       "ueberschuss": 0,
       "laderate": -3.3,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "09:25",
+      "soc": 74,
+      "ueberschuss": 0,
+      "laderate": -6.5,
       "n_punkte": 12
     }
   ],
