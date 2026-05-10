@@ -2,8 +2,6 @@ name: PV Heizstab Monitor
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/5 * * * *"
 
 permissions:
   contents: write
@@ -21,8 +19,8 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: requests installieren
-        run: pip install requests
+      - name: Pakete installieren
+        run: pip install requests websockets matplotlib numpy
 
       - name: Script ausführen
         env:
@@ -32,6 +30,9 @@ jobs:
           SOLARCLOUD_SECRET_KEY: ${{ secrets.SOLARCLOUD_SECRET_KEY }}
           ISOLARCLOUD_USER_ACCOUNT: ${{ secrets.ISOLARCLOUD_USER_ACCOUNT }}
           ISOLARCLOUD_USER_PASSWORD: ${{ secrets.ISOLARCLOUD_USER_PASSWORD }}
+          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+          TYDOM_EMAIL: ${{ secrets.TYDOM_EMAIL }}
+          TYDOM_PASSWORD: ${{ secrets.TYDOM_PASSWORD }}
         run: python main.py
 
       - name: Git konfigurieren
@@ -43,4 +44,5 @@ jobs:
         run: |
           git add status.json
           git diff --cached --quiet || git commit -m "Statusdatei automatisch aktualisiert"
+          git pull --rebase -X ours origin main
           git push
