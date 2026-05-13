@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 77,
-      "zeit": "2026-05-13T11:30:44.243058"
-    },
-    {
       "soc": 76,
       "zeit": "2026-05-13T11:35:41.306736"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 87,
       "zeit": "2026-05-13T12:25:35.993108"
+    },
+    {
+      "soc": 88,
+      "zeit": "2026-05-13T12:30:42.096664"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-05-13",
-    "ein_3kw": 1,
+    "ein_3kw": 2,
     "aus_3kw": 1,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-05-13T12:20:42.287078",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "HOCHSPEICHER",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-05-13T11:51:13.583100",
-  "letzte_aktualisierung": "2026-05-13T12:25:47.219948",
+  "letzte_schaltzeit": "2026-05-13T12:31:24.309043",
+  "letzte_aktualisierung": "2026-05-13T12:31:26.456189",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-05-13",
   "tages_verlauf": [
@@ -1186,6 +1186,17 @@
       "bat_laden_w": 2582,
       "bat_entladen_w": 0,
       "ueberschuss_w": 2568
+    },
+    {
+      "zeit": "14:30",
+      "soc": 88,
+      "pv_w": 4351,
+      "haus_w": 891,
+      "einspeisung_w": 0,
+      "netzbezug_w": 73,
+      "bat_laden_w": 3533,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3460
     }
   ],
   "schaltpunkte_heute": [
@@ -1220,15 +1231,23 @@
       "soc": 74,
       "pv_w": 2886,
       "modus": "SOC<75%"
+    },
+    {
+      "zeit": "14:30",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 88,
+      "pv_w": 4351,
+      "modus": "HOCHSPEICHER"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 34.6,
+    "pv_kwh": 35.0,
     "einspeisung_kwh": 3.7,
     "netzbezug_kwh": 3.3,
-    "bat_laden_kwh": 14.0,
+    "bat_laden_kwh": 14.3,
     "bat_entladen_kwh": 5.2,
-    "haus_kwh": 25.4
+    "haus_kwh": 25.5
   },
   "morgenreport_datum": "2026-05-13",
   "abendreport_datum": "2026-05-12",
