@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 73,
-      "zeit": "2026-05-13T08:55:27.598546"
-    },
-    {
-      "soc": 73,
       "zeit": "2026-05-13T09:00:47.110052"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 94,
       "zeit": "2026-05-13T09:50:39.713403"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-05-13T09:55:29.118948"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-05-13T08:26:13.663668",
-  "letzte_aktualisierung": "2026-05-13T09:50:50.871568",
+  "letzte_aktualisierung": "2026-05-13T09:55:40.420814",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-05-13",
   "tages_verlauf": [
@@ -845,6 +845,17 @@
       "bat_laden_w": 6016,
       "bat_entladen_w": 0,
       "ueberschuss_w": 8228
+    },
+    {
+      "zeit": "11:55",
+      "soc": 100,
+      "pv_w": 9287,
+      "haus_w": 3474,
+      "einspeisung_w": 5813,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 5813
     }
   ],
   "schaltpunkte_heute": [
@@ -858,12 +869,12 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 18.1,
-    "einspeisung_kwh": 1.5,
+    "pv_kwh": 19.0,
+    "einspeisung_kwh": 1.9,
     "netzbezug_kwh": 2.8,
     "bat_laden_kwh": 10.8,
     "bat_entladen_kwh": 0.4,
-    "haus_kwh": 9.0
+    "haus_kwh": 9.5
   },
   "morgenreport_datum": "2026-05-13",
   "abendreport_datum": "2026-05-12",
@@ -878,7 +889,7 @@
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-05-12",
   "ausschalt_pending_6kw": null,
-  "batterie_war_voll": false,
+  "batterie_war_voll": true,
   "manuell_sperre_6kw_bis": null,
   "manuell_sperre_3kw_bis": null,
   "laderate_verlauf": [
@@ -1370,6 +1381,13 @@
       "soc": 94,
       "ueberschuss": 8228,
       "laderate": 22.8,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "11:55",
+      "soc": 100,
+      "ueberschuss": 5813,
+      "laderate": 29.6,
       "n_punkte": 12
     }
   ],
