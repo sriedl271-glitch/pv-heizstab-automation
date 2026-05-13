@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 78,
-      "zeit": "2026-05-13T14:55:36.328818"
-    },
-    {
-      "soc": 78,
       "zeit": "2026-05-13T15:00:57.390175"
     },
     {
@@ -47,21 +43,25 @@
     {
       "soc": 88,
       "zeit": "2026-05-13T15:50:35.757907"
+    },
+    {
+      "soc": 89,
+      "zeit": "2026-05-13T15:55:32.590868"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-05-13",
-    "ein_3kw": 2,
+    "ein_3kw": 3,
     "aus_3kw": 2,
     "ein_6kw": 2,
     "aus_6kw": 2
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-05-13T15:45:53.343984",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "HOCHSPEICHER",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-05-13T14:01:29.856912",
-  "letzte_aktualisierung": "2026-05-13T15:50:46.934714",
+  "letzte_schaltzeit": "2026-05-13T15:56:14.596800",
+  "letzte_aktualisierung": "2026-05-13T15:56:16.817060",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-05-13",
   "tages_verlauf": [
@@ -1637,6 +1637,17 @@
       "bat_laden_w": 3729,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3716
+    },
+    {
+      "zeit": "17:55",
+      "soc": 89,
+      "pv_w": 3442,
+      "haus_w": 711,
+      "einspeisung_w": 11,
+      "netzbezug_w": 0,
+      "bat_laden_w": 2720,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 2731
     }
   ],
   "schaltpunkte_heute": [
@@ -1703,15 +1714,23 @@
       "soc": 75,
       "pv_w": 880,
       "modus": "Netz>2000W"
+    },
+    {
+      "zeit": "17:55",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 89,
+      "pv_w": 3442,
+      "modus": "HOCHSPEICHER"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 45.0,
+    "pv_kwh": 45.4,
     "einspeisung_kwh": 4.0,
     "netzbezug_kwh": 4.3,
-    "bat_laden_kwh": 19.2,
+    "bat_laden_kwh": 19.4,
     "bat_entladen_kwh": 9.9,
-    "haus_kwh": 36.0
+    "haus_kwh": 36.2
   },
   "morgenreport_datum": "2026-05-13",
   "abendreport_datum": "2026-05-12",
