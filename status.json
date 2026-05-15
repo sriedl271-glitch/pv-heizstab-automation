@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 92,
-      "zeit": "2026-05-15T15:55:26.022938"
-    },
-    {
       "soc": 90,
       "zeit": "2026-05-15T16:00:53.808249"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 81,
       "zeit": "2026-05-15T16:50:31.731360"
+    },
+    {
+      "soc": 81,
+      "zeit": "2026-05-15T16:55:27.790142"
     }
   ],
   "schaltungen_heute": {
@@ -56,12 +56,12 @@
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "NORMAL",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-05-15T13:41:17.285198",
-  "letzte_aktualisierung": "2026-05-15T16:50:43.021556",
+  "letzte_aktualisierung": "2026-05-15T16:56:01.580012",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-05-15",
   "tages_verlauf": [
@@ -1758,6 +1758,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 3466,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "18:55",
+      "soc": 81,
+      "pv_w": 919,
+      "haus_w": 3682,
+      "einspeisung_w": 5,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 2768,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1803,19 +1814,19 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 46.2,
+    "pv_kwh": 46.3,
     "einspeisung_kwh": 2.2,
     "netzbezug_kwh": 0.6,
     "bat_laden_kwh": 17.3,
-    "bat_entladen_kwh": 12.5,
-    "haus_kwh": 39.8
+    "bat_entladen_kwh": 12.7,
+    "haus_kwh": 40.1
   },
   "morgenreport_datum": "2026-05-15",
   "abendreport_datum": "2026-05-14",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 75,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": false,
+  "heizstab_6kw_ein": null,
   "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
@@ -1825,7 +1836,7 @@
   "ausschalt_pending_6kw": null,
   "batterie_war_voll": true,
   "manuell_sperre_6kw_bis": null,
-  "manuell_sperre_3kw_bis": null,
+  "manuell_sperre_3kw_bis": "2026-05-15T18:55:38.379705",
   "laderate_verlauf": [
     {
       "zeit": "06:05",
