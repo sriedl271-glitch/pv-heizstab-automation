@@ -1,48 +1,49 @@
-name: PV Heizstab Monitor
+● name: PV Heizstab Monitor
 
-on:
-  workflow_dispatch:
+  on:
+    workflow_dispatch:
 
-permissions:
-  contents: write
+  permissions:
+    contents: write
 
-jobs:
-  run-monitor:
-    runs-on: ubuntu-latest
+  jobs:
+    run-monitor:
+      runs-on: ubuntu-latest
 
-    steps:
-      - name: Repository laden
-        uses: actions/checkout@v4
+      steps:
+        - name: Repository laden
+          uses: actions/checkout@v4
 
-      - name: Python einrichten
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
+        - name: Python einrichten
+          uses: actions/setup-python@v5
+          with:
+            python-version: "3.11"
 
-      - name: Pakete installieren
-        run: pip install requests websockets matplotlib numpy
+        - name: Pakete installieren
+          run: pip install requests websockets matplotlib numpy
 
-      - name: Script ausführen
-        env:
-          PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
-          PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
-          ISOLARCLOUD_APP_KEY: ${{ secrets.ISOLARCLOUD_APP_KEY }}
-          SOLARCLOUD_SECRET_KEY: ${{ secrets.SOLARCLOUD_SECRET_KEY }}
-          ISOLARCLOUD_USER_ACCOUNT: ${{ secrets.ISOLARCLOUD_USER_ACCOUNT }}
-          ISOLARCLOUD_USER_PASSWORD: ${{ secrets.ISOLARCLOUD_USER_PASSWORD }}
-          GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
-          TYDOM_EMAIL: ${{ secrets.TYDOM_EMAIL }}
-          TYDOM_PASSWORD: ${{ secrets.TYDOM_PASSWORD }}
-        run: python main.py
+        - name: Script ausführen
+          env:
+            PUSHOVER_USER_KEY: ${{ secrets.PUSHOVER_USER_KEY }}
+            PUSHOVER_API_TOKEN: ${{ secrets.PUSHOVER_API_TOKEN }}
+            ISOLARCLOUD_APP_KEY: ${{ secrets.ISOLARCLOUD_APP_KEY }}
+            SOLARCLOUD_SECRET_KEY: ${{ secrets.SOLARCLOUD_SECRET_KEY }}
+            ISOLARCLOUD_USER_ACCOUNT: ${{ secrets.ISOLARCLOUD_USER_ACCOUNT }}
+            ISOLARCLOUD_USER_PASSWORD: ${{ secrets.ISOLARCLOUD_USER_PASSWORD }}
+            GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
+            TYDOM_EMAIL: ${{ secrets.TYDOM_EMAIL }}
+            TYDOM_PASSWORD: ${{ secrets.TYDOM_PASSWORD }}
+          run: python main.py
 
-      - name: Git konfigurieren
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+        - name: Git konfigurieren
+          run: |
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git remote set-url origin https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git
 
-      - name: status.json speichern
-        run: |
-          git add status.json
-          git diff --cached --quiet || git commit -m "Statusdatei automatisch aktualisiert"
-          git pull --rebase -X ours origin main
-          git push
+        - name: status.json speichern
+          run: |
+            git add status.json
+            git diff --cached --quiet || git commit -m "Statusdatei automatisch aktualisiert"
+            git pull --rebase -X ours origin main
+            git push
