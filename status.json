@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 98,
-      "zeit": "2026-05-26T17:30:40.405679"
-    },
-    {
       "soc": 96,
       "zeit": "2026-05-26T17:35:25.016476"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 86,
       "zeit": "2026-05-26T18:25:32.109618"
+    },
+    {
+      "soc": 85,
+      "zeit": "2026-05-26T18:30:42.794043"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-05-26",
     "ein_3kw": 1,
-    "aus_3kw": 0,
+    "aus_3kw": 1,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "NORMAL",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-05-26T06:51:11.448612",
-  "letzte_aktualisierung": "2026-05-26T18:25:43.470250",
+  "letzte_schaltzeit": "2026-05-26T18:31:23.338079",
+  "letzte_aktualisierung": "2026-05-26T18:31:24.970462",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-05-26",
   "tages_verlauf": [
@@ -1703,6 +1703,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 363,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "20:30",
+      "soc": 85,
+      "pv_w": 340,
+      "haus_w": 3184,
+      "einspeisung_w": 8,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 2852,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1713,6 +1724,14 @@
       "soc": 78,
       "pv_w": 3619,
       "modus": "NORMAL"
+    },
+    {
+      "zeit": "20:30",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 85,
+      "pv_w": 340,
+      "modus": "Abschaltzeit"
     }
   ],
   "tages_energie_isolarcloud": {
@@ -1720,8 +1739,8 @@
     "einspeisung_kwh": 23.1,
     "netzbezug_kwh": 0.1,
     "bat_laden_kwh": 7.8,
-    "bat_entladen_kwh": 5.0,
-    "haus_kwh": 34.1
+    "bat_entladen_kwh": 5.2,
+    "haus_kwh": 34.3
   },
   "morgenreport_datum": "2026-05-26",
   "abendreport_datum": "2026-05-25",
@@ -2176,7 +2195,7 @@
     }
   ],
   "saisonale_abschaltung_6kw": null,
-  "saisonale_abschaltung_3kw": null,
+  "saisonale_abschaltung_3kw": "2026-05-26",
   "thermostat_pause_3kw_bis": null,
   "thermostat_pause_6kw_bis": null
 }
