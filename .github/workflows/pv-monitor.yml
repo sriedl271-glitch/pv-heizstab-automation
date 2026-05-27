@@ -47,4 +47,4 @@
             git add status.json
             git diff --cached --quiet || git commit -m "Statusdatei automatisch aktualisiert"
             git pull --rebase -X ours origin main
-            git push
+            git push || (sleep 10 && git pull --rebase -X ours origin main && git push) || (sleep 10 && git pull --rebase -X ours origin main && git push)
