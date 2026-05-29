@@ -633,9 +633,9 @@ def aktualisiere_soc_verlauf(status: dict, soc: int) -> list:
         verlauf = verlauf[-12:]
     return verlauf
 
-def berechne_laderate(soc_verlauf: list):
-    """SOC-Anstieg in %/Stunde. None wenn < 3 Messpunkte."""
-    if len(soc_verlauf) < 3:
+def berechne_laderate(soc_verlauf: list, min_punkte: int = 3):
+    """SOC-Anstieg in %/Stunde. None wenn < min_punkte Messpunkte (Standard: 3)."""
+    if len(soc_verlauf) < min_punkte:
         return None
     try:
         alt    = soc_verlauf[0]
@@ -727,6 +727,13 @@ def ist_6kw_saison() -> bool:
         return True
     return False
 
+def ist_sommer_modus_3kw() -> bool:
+    """True ab dem Tag nach dem Saison-Ende des 6kW-Heizstabs (dynamisch verknüpft mit SAISON_6KW_ENDE).
+    Aktuell: True ab 16. Mai (wenn 6kW außer Saison).
+    Ab diesem Zeitpunkt gelten für den 3kW-Heizstab niedrigere SOC-/Laderate-/Überschuss-Schwellen.
+    """
+    return not ist_6kw_saison()
+
 def ist_automation_pausiert() -> bool:
     if not os.path.exists(AUTOMATION_PAUSE_DATEI):
         return False
@@ -808,11 +815,20 @@ def get_aus_pending_cutover() -> int:
 
 def get_aus_pending_sekunden() -> int:
     """Gibt die aktuelle AUS-Pending-Zeit zurück (3kW-Cutover-Zeit).
-    Vor Cutover: 10 Min (Testwert).
-    Ab Cutover:  10 Min.
+    Vor Cutover: 10 Min.
+    Ab Cutover:  5 Min (1 Zyklus – schnellere Reaktion abends).
     """
     if lokal_jetzt().hour >= get_aus_pending_cutover():
-        return PENDING_AUS_SEKUNDEN
+        return 300   # 5 Min ab Cutover
+    return PENDING_AUS_SEKUNDEN
+
+def get_aus_pending_sekunden_6kw() -> int:
+    """Gibt die aktuelle AUS-Pending-Zeit für 6kW zurück (6kW-Cutover-Zeit).
+    Vor 6kW-Cutover: 10 Min.
+    Ab 6kW-Cutover:  5 Min (1 Zyklus – schnellere Reaktion abends).
+    """
+    if lokal_minuten() >= get_cutover_minuten_6kw():
+        return 300   # 5 Min ab 6kW-Cutover
     return PENDING_AUS_SEKUNDEN
 
 def get_abschaltzeit_minuten_3kw() -> int:
@@ -970,9 +986,10 @@ def fuehre_abschalt_pruefung_durch(tydom_email: str, tydom_passwort: str, status
 # ═══════════════════════════════════════════════════════════════════════════════
 # SCHALTBEDINGUNGEN
 # ═══════════════════════════════════════════════════════════════════════════════
-def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
+def pruefe_3kw_einschalten(daten: dict, status: dict, laderate, laderate_sommer=None) -> tuple:
     """Returns (soll_ein, modus, sofort, einschalt_soc_min)
-    einschalt_soc_min: SOC-Schwelle die das EIN ausgelöst hat (wird als AUS-Schwelle gespeichert)
+    einschalt_soc_min: AUS-Schwelle die beim EIN gespeichert wird (Hysterese).
+    laderate_sommer: Laderate mit min. 2 Messpunkten (für Sommer-Modus).
     """
     soc         = daten["batterie_prozent"]
     pv          = daten["pv_leistung_w"]
@@ -984,26 +1001,48 @@ def pruefe_3kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
         # Einspeisung-Stopp: nur im Entlade-Betrieb – sofort EIN ohne Pending
         if einspeisung > 0 and soc >= 93 and pv >= 1000:
             return True, "EINSPEISUNG_STOPP", True, None
-        if soc >= 85 and pv >= 2000:
+        # HOCHSPEICHER: ab 16. Mai SOC-Schwelle 80% statt 85%
+        hochspeicher_soc = 80 if ist_sommer_modus_3kw() else 85
+        if soc >= hochspeicher_soc and pv >= 2000:
             return True, "HOCHSPEICHER", False, None
         return False, None, False, None
 
-    # ── Normalbetrieb: PV-Überschuss + Ladegeschwindigkeit erforderlich ───────
+    # ── Sommer-Modus (ab 16. Mai): niedrigere SOC-/Laderate-/Überschuss-Schwellen ──
+    if ist_sommer_modus_3kw():
+        lr = laderate_sommer  # min. 2 Messpunkte
+        if lr is None or lr <= 0:
+            return False, None, False, None
+
+        # Nach-Ausschalt-Sperre: SOC ≥ 80% + PV ≥ 1.500W
+        if status.get("nach_ausschalt_sperre_3kw"):
+            if lr > 0 and soc >= 80 and pv >= 1500:
+                return True, "NORMAL", False, 80   # AUS-Schwelle: SOC fällt unter 80%
+            return False, None, False, None
+
+        if lr >= 15 and 35 <= soc < 50 and ueberschuss >= 1500:
+            return True, "NORMAL", False, 30       # AUS-Schwelle: SOC fällt unter 30%
+        if lr >= 10 and 50 <= soc < 65 and ueberschuss >= 1500:
+            return True, "NORMAL", False, 45       # AUS-Schwelle: SOC fällt unter 45%
+        if lr >  5  and soc >= 65       and ueberschuss >= 1500:
+            return True, "NORMAL", False, 60       # AUS-Schwelle: SOC fällt unter 60%
+        return False, None, False, None
+
+    # ── Normalbetrieb (bis 15. Mai): PV-Überschuss + Ladegeschwindigkeit erforderlich ─
     if laderate is None or laderate <= 0:
         return False, None, False, None
 
-    # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 75% neu einschalten
+    # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 85% + PV neu einschalten
     if status.get("nach_ausschalt_sperre_3kw"):
-        if laderate > 0 and soc >= 75 and ueberschuss >= 3000:
-            return True, "NORMAL", False, 75
+        if laderate > 0 and soc >= 85 and pv >= 2000:
+            return True, "NORMAL", False, 85
         return False, None, False, None
 
     if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 2000:
-        return True, "NORMAL", False, 45
+        return True, "NORMAL", False, 40   # AUS-Schwelle: SOC fällt unter 40%
     if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 2000:
-        return True, "NORMAL", False, 60
+        return True, "NORMAL", False, 55   # AUS-Schwelle: SOC fällt unter 55%
     if laderate > 0  and soc >= 75 and ueberschuss >= 2000:
-        return True, "NORMAL", False, 75
+        return True, "NORMAL", False, 70   # AUS-Schwelle: SOC fällt unter 70%
 
     return False, None, False, None
 
@@ -1047,8 +1086,10 @@ def pruefe_3kw_ausschalten(daten: dict, status: dict) -> tuple:
         if soc < einschalt_schwelle:
             return True, f"SOC<{einschalt_schwelle}%"
     else:
-        if soc < 75:
-            return True, "SOC<75%"
+        # Fallback: ab 16. Mai (Sommer-Modus) 60%, davor 70%
+        fallback_aus = 60 if ist_sommer_modus_3kw() else 70
+        if soc < fallback_aus:
+            return True, f"SOC<{fallback_aus}%"
     if modus == "EINSPEISUNG_STOPP" and (soc < 75 or pv < 1000):
         status["modus_3kw"] = "NORMAL"
         return False, ""
@@ -1067,7 +1108,7 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
 
     # ── Entlade-Betrieb 6kW: nur Hochspeicher-Regel (vor 6kW-Cutover) ────────
     if ist_entlade_betrieb_6kw(status):
-        if soc >= 90 and pv >= 4000:
+        if soc >= 95 and pv >= 4000:
             return True, "HOCHSPEICHER", False, None
         return False, None, False, None
 
@@ -1075,18 +1116,18 @@ def pruefe_6kw_einschalten(daten: dict, status: dict, laderate) -> tuple:
     if laderate is None or laderate <= 0:
         return False, None, False, None
 
-    # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 90% neu einschalten
+    # Nach-Ausschalt-Sperre: nach AUS unterhalb der EIN-Schwelle erst ab 95% + PV neu einschalten
     if status.get("nach_ausschalt_sperre_6kw"):
-        if laderate > 0 and soc >= 90 and ueberschuss >= 4000:
-            return True, "NORMAL", False, 90
+        if laderate > 0 and soc >= 95 and pv >= 4000:
+            return True, "NORMAL", False, 95
         return False, None, False, None
 
     if laderate >= 20 and soc >= 75 and ueberschuss >= 4000:
-        return True, "NORMAL", False, 75
+        return True, "NORMAL", False, 70   # AUS-Schwelle: SOC fällt unter 70%
     if laderate >= 15 and soc >= 83 and ueberschuss >= 4000:
-        return True, "NORMAL", False, 83
+        return True, "NORMAL", False, 75   # AUS-Schwelle: SOC fällt unter 75%
     if laderate > 0  and soc >= 90 and ueberschuss >= 4000:
-        return True, "NORMAL", False, 90
+        return True, "NORMAL", False, 80   # AUS-Schwelle: SOC fällt unter 80%
 
     return False, None, False, None
 
@@ -1231,11 +1272,15 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
     ein_3kw = status.get("heizstab_3kw_ein", False)
     ein_6kw = status.get("heizstab_6kw_ein", False)
 
-    laderate     = berechne_laderate(status.get("soc_verlauf", []))
+    laderate        = berechne_laderate(status.get("soc_verlauf", []))
+    laderate_sommer = berechne_laderate(status.get("soc_verlauf", []), min_punkte=2)
     laderate_str = f"{laderate:.1f}%/h" if laderate is not None else "unbekannt"
     print(f"ℹ️  SOC={soc}% | Laderate={laderate_str} | Uebers.={ueberschuss}W | Netz={netzbezug}W")
     if not ist_6kw_saison():
         print("ℹ️  6kW: Sommersperre aktiv (16.Mai-30.Sep)")
+    if ist_sommer_modus_3kw():
+        lr_s_str = f"{laderate_sommer:.1f}%/h" if laderate_sommer is not None else "unbekannt"
+        print(f"ℹ️  3kW: Sommer-Modus aktiv (Saison 6kW beendet) | Laderate (2 Punkte): {lr_s_str}")
 
     # batterie_war_voll: einmalig setzen wenn SOC heute erstmals 100% erreicht
     if soc >= 100 and not status.get("batterie_war_voll", False):
@@ -1248,7 +1293,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     # AUS-Pending: im Entlade-Betrieb immer 10 Min (kein saisonales 20-Min-Pending)
     aus_pending_sek_3kw = PENDING_AUS_SEKUNDEN if entlade_betrieb     else get_aus_pending_sekunden()
-    aus_pending_sek_6kw = PENDING_AUS_SEKUNDEN if entlade_betrieb_6kw else get_aus_pending_sekunden()
+    aus_pending_sek_6kw = PENDING_AUS_SEKUNDEN if entlade_betrieb_6kw else get_aus_pending_sekunden_6kw()
     if entlade_betrieb:
         print(f"ℹ️  Hochspeicher-Entlade-Betrieb aktiv 3kW (AUS-Pending: 10 Min)")
     if entlade_betrieb_6kw:
@@ -1369,7 +1414,7 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                     status["einschalt_pending_3kw"] = None
                     print("ℹ️  3kW EIN Pending geloescht (Thermostat-Pause)")
             else:
-                soll_ein, modus, sofort, einschalt_soc_min_3kw = pruefe_3kw_einschalten(daten, status, laderate)
+                soll_ein, modus, sofort, einschalt_soc_min_3kw = pruefe_3kw_einschalten(daten, status, laderate, laderate_sommer)
                 # Nach Thermostat-Pause im Entlade-Betrieb: sofort EIN ohne Pending
                 if soll_ein and pause_3kw_abgelaufen and entlade_betrieb:
                     sofort = True
@@ -1489,13 +1534,16 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 # ═══════════════════════════════════════════════════════════════════════════════
 # REGELÜBERSICHTS-DIAGRAMM
 # ═══════════════════════════════════════════════════════════════════════════════
+REGELUEBERSICHT_DATEI = "Dokumente/Regeluebersicht_aktuell.png"
+
 def erstelle_regeldiagramm() -> bytes:
     """
-    Erstellt Regelübersichts-Diagramm v6 als PNG.
+    Erstellt Regelübersichts-Diagramm v2.11 als PNG.
     X-Achse: 05:00 – 23:00 Uhr CEST (Dezimalstunden)
     Y-Achse: SOC 0% – 100%
     Links (bis 14:00): 3kW Brauchwasser-Zonen
     Rechts (ab 14:00): 6kW Fussboden-Zonen
+    SOC-Kurve: Musterkurve vom 04.05.2026 (fest eingebaut als Referenztag).
     """
     try:
         import matplotlib
@@ -1515,7 +1563,7 @@ def erstelle_regeldiagramm() -> bytes:
     # Schwellenwerte
     S3_SCHNELL  = 45
     S3_MITTEL   = 60
-    S3_SPERRE   = 75  # identisch mit S3_LANGSAM nach Redesign (nach_ausschalt_sperre → 75%)
+    S3_SPERRE   = 85  # Nach-Ausschalt-Sperre: Wiedereinschalten erst ab 85% (v2.11)
     S3_LANGSAM  = 75
     S3_ABSCHALT = 85
     S3_HOCH     = 93
@@ -1523,7 +1571,7 @@ def erstelle_regeldiagramm() -> bytes:
     S6_SCHNELL  = 75
     S6_MITTEL   = 83
     S6_LANGSAM  = 90
-    S6_HOCH     = 98
+    S6_HOCH     = 95  # Hochspeicher-EIN + Nach-Ausschalt-Sperre ab 95% (v2.11)
 
     X_MIN, X_MID, X_MAX = 5.0, 14.0, 23.0
 
@@ -1543,10 +1591,9 @@ def erstelle_regeldiagramm() -> bytes:
     # 3kW linke Haelfte (ab 30%)
     zone_rect(X_MIN, X_MID, 30,           S3_SCHNELL,  "#fff5c0")
     zone_rect(X_MIN, X_MID, S3_SCHNELL,   S3_MITTEL,   "#b8f0b8")
-    zone_rect(X_MIN, X_MID, S3_MITTEL,    S3_SPERRE,   "#80d880")
-    zone_rect(X_MIN, X_MID, S3_SPERRE,    S3_LANGSAM,  "#50c050")
-    zone_rect(X_MIN, X_MID, S3_LANGSAM,   S3_ABSCHALT, "#38a838")
-    zone_rect(X_MIN, X_MID, S3_ABSCHALT,  S3_HOCH,     "#a8e8a8")
+    zone_rect(X_MIN, X_MID, S3_MITTEL,    S3_LANGSAM,  "#80d880")
+    zone_rect(X_MIN, X_MID, S3_LANGSAM,   S3_SPERRE,   "#50c050")
+    zone_rect(X_MIN, X_MID, S3_SPERRE,    S3_HOCH,     "#a8e8a8")
     zone_rect(X_MIN, X_MID, S3_HOCH,      S3_EINSP,    "#ffff88")
     zone_rect(X_MIN, X_MID, S3_EINSP,     100,         "#ffe000")
     # 6kW rechte Haelfte (ab 30%)
@@ -1613,22 +1660,70 @@ def erstelle_regeldiagramm() -> bytes:
         ax.text(xc - 0.25, 33, lbl, fontsize=7.5, ha="center", va="bottom",
                 color=col, rotation=90, fontweight="bold", zorder=6)
 
-    # ── Beispiel SOC-Kurve (Mustertagsverlauf) ────────────────────────────────
-    soc_x = np.array([6.0, 7.0, 8.0,  9.0,  10.0, 10.5,
-                      12.0, 14.0, 15.0, 16.0, 17.5, 19.0, 21.0, 23.0])
-    soc_y = np.array([62,  72,  82,   91,   97,   100,
-                      100,  100,  96,   89,   79,   68,   57,   47])
+    # ── SOC-Kurve: Referenztag 04.05.2026 (fest eingebaut) ───────────────────
+    # Dezimalstunden: HH + MM/60
+    soc_x = np.array([
+        6.00, 6.25, 6.58, 7.25, 7.50, 7.75,
+        8.00, 8.25, 8.50, 8.75, 9.00, 9.25, 9.50,
+        9.75, 9.92, 10.00, 10.25, 10.50, 10.67, 10.75,
+        10.92, 11.00, 11.25, 11.50, 12.00, 12.17, 12.25,
+        12.67, 12.75, 13.00, 13.25, 13.33,
+        13.50, 13.75, 14.00, 14.25, 14.50, 14.75,
+        15.00, 15.25, 15.50, 15.75, 15.83,
+        16.00, 16.25, 16.50, 16.58, 16.67,
+        16.75, 17.00, 17.25, 17.50, 17.75,
+        18.00, 18.25, 18.50, 18.75
+    ])
+    soc_y = np.array([
+        32, 30, 29, 29, 30, 30,
+        32, 33, 34, 36, 38, 43, 49,
+        56, 60, 61, 67, 75, 79, 82,
+        84, 83, 80, 77, 77, 75, 74,
+        75, 77, 86, 95, 100,
+        100, 97, 96, 97, 98, 98,
+        97, 97, 94, 90, 90,
+        89, 86, 85, 84, 86,
+        89, 92, 94, 95, 95,
+        90, 89, 87, 86
+    ])
+    kurve_label = "SOC-Verlauf (Referenz 04.05.2026)"
     ax.plot(soc_x, soc_y, color="#2244cc", lw=2.5, zorder=10, clip_on=True)
-    ax.text(5.3, 68, "SOC-Verlauf (Beispiel)", fontsize=7.5,
-            color="#2244cc", va="bottom", ha="left")
 
-    # Stern bei erstem SOC=100%
-    first_100_idx = int(np.argmax(soc_y >= 100))
-    x_star = float(soc_x[first_100_idx])   # = 10.5
+    # ── Schaltpunkte vom Referenztag 04.05.2026 ──────────────────────────────
+    schaltpunkte_fest = [
+        {"zeit": "09:55", "x": 9.917, "soc": 60,  "geraet": "3kw", "aktion": "EIN",  "modus": "NORMAL"},
+        {"zeit": "10:40", "x": 10.667,"soc": 79,  "geraet": "6kw", "aktion": "EIN",  "modus": "NORMAL"},
+        {"zeit": "12:25", "x": 12.417,"soc": 74,  "geraet": "6kw", "aktion": "AUS",  "modus": "SOC<75%"},
+        {"zeit": "13:20", "x": 13.333,"soc": 100, "geraet": "6kw", "aktion": "EIN",  "modus": "HOCHSPEICHER"},
+        {"zeit": "16:30", "x": 16.500,"soc": 85,  "geraet": "6kw", "aktion": "AUS",  "modus": "Abschaltzeit"},
+    ]
+    for sp in schaltpunkte_fest:
+        x_sp   = sp["x"]
+        y_sp   = sp["soc"]
+        farbe  = "#1a6e1a" if sp["geraet"] == "3kw" else "#cc5500"
+        marker = "^" if sp["aktion"] == "EIN" else "v"
+        ax.plot(x_sp, y_sp, marker=marker, markersize=11,
+                color=farbe, markeredgecolor="white",
+                markeredgewidth=1.2, zorder=14, clip_on=True)
+        label_sp = f"{sp['zeit']}\n{sp['geraet'].upper()} {sp['aktion']}\n{sp['modus']}"
+        xytext_x = x_sp + (0.3 if sp["aktion"] == "EIN" else -0.3)
+        xytext_y = y_sp + (5   if sp["aktion"] == "EIN" else -7)
+        ax.annotate(
+            label_sp,
+            xy=(x_sp, y_sp),
+            xytext=(xytext_x, xytext_y),
+            fontsize=6.5, ha="left" if sp["aktion"] == "EIN" else "right",
+            va="center", color=farbe, zorder=13,
+            bbox=dict(boxstyle="round,pad=0.2", facecolor="white",
+                      edgecolor=farbe, alpha=0.85, lw=0.9),
+            arrowprops=dict(arrowstyle="->", color=farbe, lw=0.8))
+
+    # Stern bei SOC=100% (13:20 Uhr)
+    x_star = 13.333
     ax.plot(x_star, 100.0, marker="*", markersize=18, color="#cc8800",
             markeredgecolor="#884400", zorder=12, clip_on=False)
     ax.annotate(
-        "batterie_war_voll=True\nab 10:30 → Entlade-Betrieb aktiv",
+        "batterie_war_voll=True\nab 13:20 → Entlade-Betrieb aktiv",
         xy=(x_star, 100.0), xytext=(x_star + 0.7, 102.0),
         fontsize=8, ha="left", va="center", zorder=9,
         bbox=dict(boxstyle="round,pad=0.45", facecolor="#fffde0",
@@ -1643,10 +1738,10 @@ def erstelle_regeldiagramm() -> bytes:
         "(aktiv: batterie_war_voll=True\n"
         "UND vor Cutover-Zeit)\n"
         "EIN 3kW: nur SOC ≥93% + PV ≥2.000W\n"
-        "EIN 6kW: nur SOC ≥98% + PV ≥4.500W\n"
+        "EIN 6kW: nur SOC ≥95% + PV ≥4.000W\n"
         "Alle Normal-Regeln BLOCKIERT\n"
-        "AUS 3kW: SOC < 85% oder Netz >\n"
-        "AUS 6kW: SOC < 93% oder Netz >\n"
+        "AUS 3kW: SOC < 75% oder Netz >\n"
+        "AUS 6kW: SOC < 80% oder Netz >\n"
         "Netz ≤ 2.000W (SOC über Grenze)\n"
         "Netz ≤ 800W (SOC unter Grenze)\n"
         "EIN-Pending: 10 Min (480s)",
@@ -1657,12 +1752,11 @@ def erstelle_regeldiagramm() -> bytes:
 
     # ── Pending Box (rechts im orangenen Bereich) ─────────────────────────────
     ax.annotate(
-        "PENDING-ZEITEN\n"
-        "EIN Normal (außer 6kW Langsam): 20 Min\n"
-        "EIN 6kW Langsames Laden (≥90%): 10 Min\n"
+        "PENDING-ZEITEN (v2.11)\n"
+        "EIN Normal (alle): 10 Min\n"
         "EIN Entlade-Betrieb (beide): 10 Min\n"
-        "AUS vor Cutover: 20 Min\n"
-        "AUS ab Cutover: 10 Min\n"
+        "AUS vor Cutover: 10 Min\n"
+        "AUS ab Cutover: 5 Min (1 Zyklus)\n"
         "AUS Entlade-Betrieb: immer 10 Min",
         xy=(21.5, 55), fontsize=8, ha="center", va="center", zorder=8,
         bbox=dict(boxstyle="round,pad=0.5", facecolor="#eeeeff",
@@ -1687,9 +1781,9 @@ def erstelle_regeldiagramm() -> bytes:
     # ── 3kW Zonenbeschriftungen (schwarz, einzeilig, ab x=6.15) ──────────────
     labels_3kw = [
         (37.5, "3kW: kein EIN (30–44%: SOC zu niedrig)"),
-        (52.5, "3kW EIN: Schnelles Laden – Laderate ≥20%/h, SOC ≥45%, Üb. ≥3.200W | Nach Sperre: kein EIN bis ≥75%"),
-        (65.0, "3kW EIN: Mittleres Laden – Laderate ≥15%/h, SOC ≥60%, Üb. ≥3.200W | Nach Sperre: kein EIN bis ≥75%"),
-        (80.0, "3kW EIN: Langsames Laden – Laderate > 0, SOC ≥75%, Üb. ≥3.200W (auch nach Ausschalt-Sperre)"),
+        (52.5, "3kW EIN: Schnelles Laden – Laderate ≥20%/h, SOC ≥45%, Üb. ≥2.000W | Nach Sperre: kein EIN bis ≥85%+PV≥2.000W"),
+        (65.0, "3kW EIN: Mittleres Laden – Laderate ≥15%/h, SOC ≥60%, Üb. ≥2.000W | Nach Sperre: kein EIN bis ≥85%+PV≥2.000W"),
+        (80.0, "3kW EIN: Langsames Laden – Laderate > 0, SOC ≥75%, Üb. ≥2.000W | Nach Sperre erst ab ≥85%+PV≥2.000W"),
         (89.0, "Normalbetrieb: Langsames Laden aktiv | Entlade-Betrieb: kein EIN (Normal-Regeln BLOCKIERT)"),
         (96.0, "3kW EIN: HOCHSPEICHER (nur Entlade-Betrieb) – SOC ≥93% + PV ≥2.000W – 10 Min Pending"),
         (99.5, "3kW EIN: EINSPEISUNG_STOPP (beide Modi) – SOC ≥99%, sofort"),
@@ -1700,11 +1794,11 @@ def erstelle_regeldiagramm() -> bytes:
 
     # ── 6kW Zonenbeschriftungen (schwarz, einzeilig, bei x=21.85) ─────────────
     labels_6kw = [
-        (52.5, "6kW: kein EIN zwischen 30–74% SOC | Nach Sperre: kein EIN bis ≥90%"),
-        (79.0, "6kW EIN: Schnelles Laden – Laderate ≥20%/h, SOC ≥75%, Üb. ≥6.300W | Nach Sperre: kein EIN bis ≥90%"),
-        (86.5, "6kW EIN: Mittleres Laden – Laderate ≥15%/h, SOC ≥83%, Üb. ≥6.300W | Nach Sperre: kein EIN bis ≥90%"),
-        (94.0, "6kW EIN: Langsames Laden – Laderate > 0, SOC ≥90%, Üb. ≥6.300W – 10 Min Pending (auch nach Sperre)"),
-        (99.0, "6kW EIN: HOCHSPEICHER (nur Entlade-Betrieb) – SOC ≥98% + PV ≥4.500W – 10 Min Pending"),
+        (52.5, "6kW: kein EIN zwischen 30–74% SOC | Nach Sperre: kein EIN bis ≥95%+PV≥4.000W"),
+        (79.0, "6kW EIN: Schnelles Laden – Laderate ≥20%/h, SOC ≥75%, Üb. ≥4.000W | Nach Sperre: kein EIN bis ≥95%+PV≥4.000W"),
+        (86.5, "6kW EIN: Mittleres Laden – Laderate ≥15%/h, SOC ≥83%, Üb. ≥4.000W | Nach Sperre: kein EIN bis ≥95%+PV≥4.000W"),
+        (94.0, "6kW EIN: Langsames Laden – Laderate > 0, SOC ≥90%, Üb. ≥4.000W – 10 Min Pending | Nach Sperre erst ab ≥95%+PV≥4.000W"),
+        (97.5, "6kW EIN: HOCHSPEICHER (nur Entlade-Betrieb) – SOC ≥95% + PV ≥4.000W – 10 Min Pending"),
     ]
     for y, txt in labels_6kw:
         ax.text(21.85, y, txt, fontsize=7.5, color="black",
@@ -1714,8 +1808,8 @@ def erstelle_regeldiagramm() -> bytes:
     left_schwellen = [
         (S3_EINSP,    DARK_GREEN, "3kW: 99% Einsp.-Stopp"),
         (S3_HOCH,     DARK_GREEN, "3kW: 93% Hochsp.-EIN"),
-        (S3_ABSCHALT, DARK_GREEN, "3kW: 85% Hochsp.-AUS"),
-        (S3_LANGSAM,  DARK_GREEN, "3kW: 75% Langsam / Sperre / AUS"),
+        (S3_SPERRE,   DARK_GREEN, "3kW: 85% Sperre-Freigabe / Hochsp.-AUS"),
+        (S3_LANGSAM,  DARK_GREEN, "3kW: 75% Langsam / AUS"),
         (S3_MITTEL,   DARK_GREEN, "3kW: 60% Mittel"),
         (S3_SCHNELL,  DARK_GREEN, "3kW: 45% Schnell"),
         (30,          "red",      "30% Notstromreserve"),
@@ -1726,7 +1820,7 @@ def erstelle_regeldiagramm() -> bytes:
 
     # ── 6kW Schwellenbeschriftungen (AUSSEN RECHTS bei x=23.08) ──────────────
     right_schwellen = [
-        (S6_HOCH,    DARK_ORANGE, "6kW: 98% Hochsp.-EIN"),
+        (S6_HOCH,    DARK_ORANGE, "6kW: 95% Hochsp.-EIN / Sperre"),
         (S6_LANGSAM, DARK_ORANGE, "6kW: 90% Langsam"),
         (S6_MITTEL,  DARK_ORANGE, "6kW: 83% Mittel"),
         (S6_SCHNELL, DARK_ORANGE, "6kW: 75% Schnell"),
@@ -1746,7 +1840,7 @@ def erstelle_regeldiagramm() -> bytes:
     ax.grid(True, alpha=0.06, linestyle=":",  which="minor")
 
     ax.set_title(
-        "PV Heizstab Automation – Regelübersicht v2.6 (Stand: 18.04.2026)\n"
+        "PV Heizstab Automation – Regelübersicht v2.11 (Stand: 04.05.2026)\n"
         "Links (bis 14:00): 3kW Brauchwasser  |  Rechts (ab 14:00): 6kW Fußbodenheizung\n"
         "Normalbetrieb: Schnell/Mittel/Langsam (Überschuss+Laderate)  |  Entlade-Betrieb: nur Hochspeicher-Regel",
         fontsize=11, fontweight="bold", pad=10)
@@ -1768,7 +1862,15 @@ def erstelle_regeldiagramm() -> bytes:
         mlines.Line2D([], [], color="#bb4400", lw=1.5, ls="--",
                       label="Cutover Sommer (Mai–Sep): 18:00"),
         mlines.Line2D([], [], color="#2244cc", lw=2.5,
-                      label="SOC-Verlauf (Beispiel)"),
+                      label=kurve_label),
+        mlines.Line2D([], [], color="#1a6e1a", lw=0, marker="^", markersize=9,
+                      label="3kW EIN-Signal"),
+        mlines.Line2D([], [], color="#1a6e1a", lw=0, marker="v", markersize=9,
+                      label="3kW AUS-Signal"),
+        mlines.Line2D([], [], color="#cc5500", lw=0, marker="^", markersize=9,
+                      label="6kW EIN-Signal"),
+        mlines.Line2D([], [], color="#cc5500", lw=0, marker="v", markersize=9,
+                      label="6kW AUS-Signal"),
         mpatches.Patch(color="#fffde0",   alpha=0.95, ec="#cc8800",
                        label="★ batterie_war_voll → Entlade-Betrieb"),
         mpatches.Patch(color="#ffeedd",   alpha=0.95, ec="#cc6600",
@@ -1778,14 +1880,20 @@ def erstelle_regeldiagramm() -> bytes:
     ]
     ax.legend(handles=legend_handles, loc="upper left",
               bbox_to_anchor=(0.0, -0.12),
-              fontsize=8, ncol=4, framealpha=0.96,
+              fontsize=8, ncol=5, framealpha=0.96,
               edgecolor="#cccccc", title="Legende", title_fontsize=9)
 
     buf = io.BytesIO()
     plt.savefig(buf, dpi=150, bbox_inches="tight", facecolor="#f8f8f8")
+    # Auch als feste Datei speichern (wird täglich überschrieben)
+    try:
+        plt.savefig(REGELUEBERSICHT_DATEI, dpi=150, bbox_inches="tight", facecolor="#f8f8f8")
+        print(f"✅ Regeldiagramm v2.11 gespeichert: {REGELUEBERSICHT_DATEI}")
+    except Exception as e:
+        print(f"⚠️  Regeldiagramm konnte nicht als Datei gespeichert werden: {e}")
     plt.close()
     buf.seek(0)
-    print("✅ Regeldiagramm v6 erstellt.")
+    print("✅ Regeldiagramm v2.11 erstellt.")
     return buf.read()
 
 
@@ -2105,29 +2213,38 @@ def erstelle_laderate_diagramm(status: dict) -> bytes:
         buf.seek(0)
         return buf.read()
 
+    # EIN-Zeiten aus schaltpunkte_heute (nur Normalbetrieb)
+    schaltpunkte = status.get("schaltpunkte_heute", [])
+    ein_zeiten_3kw = {sp["zeit"] for sp in schaltpunkte
+                      if sp.get("geraet") == "3kw" and sp.get("aktion") == "EIN"
+                      and sp.get("modus") == "NORMAL"}
+    ein_zeiten_6kw = {sp["zeit"] for sp in schaltpunkte
+                      if sp.get("geraet") == "6kw" and sp.get("aktion") == "EIN"
+                      and sp.get("modus") == "NORMAL"}
+
     def signal_3kw(soc, ueberschuss, laderate):
         if laderate is None or laderate <= 0:
             return "–"
-        if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 3000:
+        if laderate >= 20 and 45 <= soc < 60 and ueberschuss >= 2000:
             return "Schnell"
-        if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 3000:
+        if laderate >= 15 and 60 <= soc < 75 and ueberschuss >= 2000:
             return "Mittel"
-        if laderate > 0  and soc >= 75 and ueberschuss >= 3000:
+        if laderate > 0  and soc >= 75 and ueberschuss >= 2000:
             return "Langsam"
         return "–"
 
     def signal_6kw(soc, ueberschuss, laderate):
         if laderate is None or laderate <= 0:
             return "–"
-        if laderate >= 20 and soc >= 75 and ueberschuss >= 6300:
+        if laderate >= 20 and soc >= 75 and ueberschuss >= 4000:
             return "Schnell"
-        if laderate >= 15 and soc >= 83 and ueberschuss >= 5000:
+        if laderate >= 15 and soc >= 83 and ueberschuss >= 4000:
             return "Mittel"
         if laderate > 0  and soc >= 90 and ueberschuss >= 4000:
             return "Langsam"
         return "–"
 
-    headers   = ["Zeit", "SOC %", "Übersch. W", "Laderate %/h", "# Pkte", "Signal"]
+    headers   = ["Zeit", "SOC %", "Übersch. W", "Laderate %/h", "# Pkte", "Signal", "EIN-Signal"]
     rows_3kw  = []
     rows_6kw  = []
     zeiten    = []
@@ -2142,8 +2259,10 @@ def erstelle_laderate_diagramm(status: dict) -> bytes:
         zeit = e["zeit"]
         sig3 = signal_3kw(soc, ueb, lr)
         sig6 = signal_6kw(soc, ueb, lr)
-        rows_3kw.append([zeit, str(soc), str(ueb), lr_str, str(n), sig3])
-        rows_6kw.append([zeit, str(soc), str(ueb), lr_str, str(n), sig6])
+        ein3 = "→ EIN ✓" if zeit in ein_zeiten_3kw else ""
+        ein6 = "→ EIN ✓" if zeit in ein_zeiten_6kw else ""
+        rows_3kw.append([zeit, str(soc), str(ueb), lr_str, str(n), sig3, ein3])
+        rows_6kw.append([zeit, str(soc), str(ueb), lr_str, str(n), sig6, ein6])
         zeiten.append(zeit)
         soc_werte.append(soc)
 
@@ -2183,11 +2302,18 @@ def erstelle_laderate_diagramm(status: dict) -> bytes:
             tbl[0, j].set_facecolor(farbe)
             tbl[0, j].set_text_props(color="white", fontweight="bold")
 
-        # Zeilen: Signal-Zeilen hervorheben, sonst abwechselnd
-        sig_bg_ja  = "#c8eec8" if farbe == DARK_GREEN else "#ffe0b0"
+        # Farben: Signal (Spalte 5), EIN-Signal (Spalte 6)
+        sig_bg_ja  = "#c8eec8" if farbe == DARK_GREEN else "#ffe0b0"   # Signal aktiv (hell)
+        ein_bg     = "#33aa33" if farbe == DARK_GREEN else "#cc6600"    # EIN-Signal (kräftig)
+        IDX_SIG    = 5   # Spalte "Signal"
+        IDX_EIN    = 6   # Spalte "EIN-Signal"
         for i, row in enumerate(rows, 1):
-            signal = row[-1]
-            if signal != "–":
+            hat_signal  = row[IDX_SIG] != "–"
+            hat_ein_sig = row[IDX_EIN] != ""
+            # Zeilenhintergrund
+            if hat_ein_sig:
+                bg = sig_bg_ja   # gleiche helle Farbe wie Signal-Zeilen
+            elif hat_signal:
                 bg = sig_bg_ja
             elif i % 2 == 0:
                 bg = "#f0f0f0"
@@ -2195,19 +2321,23 @@ def erstelle_laderate_diagramm(status: dict) -> bytes:
                 bg = "#ffffff"
             for j in range(len(headers)):
                 tbl[i, j].set_facecolor(bg)
+            # EIN-Signal-Zelle extra hervorheben
+            if hat_ein_sig:
+                tbl[i, IDX_EIN].set_facecolor(ein_bg)
+                tbl[i, IDX_EIN].set_text_props(color="white", fontweight="bold")
 
     ax1 = fig.add_subplot(gs[0])
     zeichne_tabelle(ax1,
                     f"① 3kW Brauchwasser – Normalbetrieb {datum_str}  "
-                    f"(Schwellen: Schnell SOC 45–59% ≥20%/h ≥3000W | "
-                    f"Mittel SOC 60–74% ≥15%/h ≥3000W | Langsam SOC ≥75% >0 ≥3000W)",
+                    f"(Schwellen: Schnell SOC 45–59% ≥20%/h ≥2000W | "
+                    f"Mittel SOC 60–74% ≥15%/h ≥2000W | Langsam SOC ≥75% >0 ≥2000W)",
                     rows_3kw, DARK_GREEN)
 
     ax2 = fig.add_subplot(gs[1])
     zeichne_tabelle(ax2,
                     f"② 6kW Fußbodenheizung – Normalbetrieb {datum_str}  "
-                    f"(Schwellen: Schnell SOC ≥75% ≥20%/h ≥6300W | "
-                    f"Mittel SOC ≥83% ≥15%/h ≥5000W | Langsam SOC ≥90% >0 ≥4000W)",
+                    f"(Schwellen: Schnell SOC ≥75% ≥20%/h ≥4000W | "
+                    f"Mittel SOC ≥83% ≥15%/h ≥4000W | Langsam SOC ≥90% >0 ≥4000W)",
                     rows_6kw, DARK_ORANGE)
 
     # ── SOC-Kurve ─────────────────────────────────────────────────────────────
