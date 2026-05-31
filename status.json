@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 74,
-      "zeit": "2026-05-31T13:20:33.461962"
-    },
-    {
       "soc": 77,
       "zeit": "2026-05-31T13:25:25.650091"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 81,
       "zeit": "2026-05-31T14:15:30.073495"
+    },
+    {
+      "soc": 83,
+      "zeit": "2026-05-31T14:20:28.996161"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-05-31",
-    "ein_3kw": 1,
+    "ein_3kw": 2,
     "aus_3kw": 1,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-05-31T14:10:44.679667",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "HOCHSPEICHER",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-05-31T12:51:11.315698",
-  "letzte_aktualisierung": "2026-05-31T14:15:41.152688",
+  "letzte_schaltzeit": "2026-05-31T14:21:09.466708",
+  "letzte_aktualisierung": "2026-05-31T14:21:11.006119",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-05-31",
   "tages_verlauf": [
@@ -1428,6 +1428,17 @@
       "bat_laden_w": 3833,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3799
+    },
+    {
+      "zeit": "16:20",
+      "soc": 83,
+      "pv_w": 4268,
+      "haus_w": 435,
+      "einspeisung_w": 0,
+      "netzbezug_w": 9,
+      "bat_laden_w": 3842,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3833
     }
   ],
   "schaltpunkte_heute": [
@@ -1446,15 +1457,23 @@
       "soc": 69,
       "pv_w": 777,
       "modus": "SOC<75%"
+    },
+    {
+      "zeit": "16:20",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 83,
+      "pv_w": 4268,
+      "modus": "HOCHSPEICHER"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 41.6,
+    "pv_kwh": 42.0,
     "einspeisung_kwh": 10.8,
     "netzbezug_kwh": 0.2,
-    "bat_laden_kwh": 11.9,
+    "bat_laden_kwh": 12.2,
     "bat_entladen_kwh": 7.4,
-    "haus_kwh": 26.5
+    "haus_kwh": 26.6
   },
   "morgenreport_datum": "2026-05-31",
   "abendreport_datum": "2026-05-30",
