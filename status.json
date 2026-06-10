@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 59,
-      "zeit": "2026-06-10T13:05:38.321236"
-    },
-    {
       "soc": 57,
       "zeit": "2026-06-10T13:10:37.599255"
     },
@@ -47,22 +43,26 @@
     {
       "soc": 43,
       "zeit": "2026-06-10T14:00:58.733129"
+    },
+    {
+      "soc": 43,
+      "zeit": "2026-06-10T14:05:34.888720"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-06-10",
     "ein_3kw": 1,
-    "aus_3kw": 0,
+    "aus_3kw": 1,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "NORMAL",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-06-10T09:41:19.570420",
-  "letzte_aktualisierung": "2026-06-10T14:01:10.215175",
-  "ausschalt_pending_3kw": "2026-06-10T13:55:49.468648",
+  "letzte_schaltzeit": "2026-06-10T14:06:16.504095",
+  "letzte_aktualisierung": "2026-06-10T14:06:18.768604",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-06-10",
   "tages_verlauf": [
     {
@@ -1384,6 +1384,17 @@
       "bat_laden_w": 679,
       "bat_entladen_w": 0,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "16:05",
+      "soc": 43,
+      "pv_w": 2327,
+      "haus_w": 2554,
+      "einspeisung_w": 0,
+      "netzbezug_w": 906,
+      "bat_laden_w": 679,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1394,6 +1405,14 @@
       "soc": 55,
       "pv_w": 4650,
       "modus": "NORMAL"
+    },
+    {
+      "zeit": "16:05",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 43,
+      "pv_w": 2327,
+      "modus": "SOC<45%"
     }
   ],
   "tages_energie_isolarcloud": {
@@ -1407,8 +1426,8 @@
   "morgenreport_datum": "2026-06-10",
   "abendreport_datum": "2026-06-09",
   "einschalt_pending_6kw": null,
-  "einschalt_schwelle_3kw": 45,
-  "nach_ausschalt_sperre_3kw": false,
+  "einschalt_schwelle_3kw": null,
+  "nach_ausschalt_sperre_3kw": true,
   "heizstab_6kw_ein": false,
   "modus_6kw": null,
   "soc_abschaltung_6kw": false,
@@ -2259,6 +2278,13 @@
       "soc": 43,
       "ueberschuss": 0,
       "laderate": -17.3,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "16:05",
+      "soc": 43,
+      "ueberschuss": 0,
+      "laderate": -15.3,
       "n_punkte": 12
     }
   ],
