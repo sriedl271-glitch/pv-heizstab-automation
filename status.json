@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 94,
-      "zeit": "2026-06-11T17:30:50.280151"
-    },
-    {
       "soc": 92,
       "zeit": "2026-06-11T17:35:36.782113"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 85,
       "zeit": "2026-06-11T18:25:33.595226"
+    },
+    {
+      "soc": 85,
+      "zeit": "2026-06-11T18:30:51.922980"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-06-11",
     "ein_3kw": 1,
-    "aus_3kw": 0,
+    "aus_3kw": 1,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "NORMAL",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-06-11T08:11:20.455363",
-  "letzte_aktualisierung": "2026-06-11T18:25:45.585060",
+  "letzte_schaltzeit": "2026-06-11T18:31:33.278252",
+  "letzte_aktualisierung": "2026-06-11T18:31:36.142346",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-06-11",
   "tages_verlauf": [
@@ -1978,6 +1978,17 @@
       "bat_laden_w": 341,
       "bat_entladen_w": 0,
       "ueberschuss_w": 334
+    },
+    {
+      "zeit": "20:30",
+      "soc": 85,
+      "pv_w": 858,
+      "haus_w": 554,
+      "einspeisung_w": 0,
+      "netzbezug_w": 10,
+      "bat_laden_w": 314,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 304
     }
   ],
   "schaltpunkte_heute": [
@@ -1988,6 +1999,14 @@
       "soc": 57,
       "pv_w": 3247,
       "modus": "NORMAL"
+    },
+    {
+      "zeit": "20:31",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 85,
+      "pv_w": 858,
+      "modus": "Abschaltzeit"
     }
   ],
   "tages_energie_isolarcloud": {
@@ -2654,7 +2673,7 @@
     }
   ],
   "saisonale_abschaltung_6kw": null,
-  "saisonale_abschaltung_3kw": null,
+  "saisonale_abschaltung_3kw": "2026-06-11",
   "thermostat_pause_3kw_bis": null,
   "thermostat_pause_6kw_bis": null
 }
