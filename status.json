@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 85,
-      "zeit": "2026-06-18T06:30:51.791239"
-    },
-    {
-      "soc": 85,
       "zeit": "2026-06-18T06:35:36.725343"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 99,
       "zeit": "2026-06-18T07:25:36.881019"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-06-18T07:31:01.549403"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-06-18T05:11:23.685989",
-  "letzte_aktualisierung": "2026-06-18T07:25:48.444443",
+  "letzte_aktualisierung": "2026-06-18T07:31:13.192632",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-06-18",
   "tages_verlauf": [
@@ -526,6 +526,17 @@
       "bat_laden_w": 1096,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3698
+    },
+    {
+      "zeit": "09:31",
+      "soc": 100,
+      "pv_w": 7111,
+      "haus_w": 3157,
+      "einspeisung_w": 3954,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3954
     }
   ],
   "schaltpunkte_heute": [
@@ -539,12 +550,12 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 12.3,
-    "einspeisung_kwh": 0.5,
+    "pv_kwh": 13.4,
+    "einspeisung_kwh": 1.0,
     "netzbezug_kwh": 0.0,
-    "bat_laden_kwh": 4.9,
+    "bat_laden_kwh": 5.0,
     "bat_entladen_kwh": 2.3,
-    "haus_kwh": 9.2
+    "haus_kwh": 9.7
   },
   "morgenreport_datum": "2026-06-18",
   "abendreport_datum": "2026-06-17",
@@ -559,7 +570,7 @@
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-06-17",
   "ausschalt_pending_6kw": null,
-  "batterie_war_voll": false,
+  "batterie_war_voll": true,
   "manuell_sperre_6kw_bis": null,
   "manuell_sperre_3kw_bis": null,
   "laderate_verlauf": [
@@ -848,6 +859,13 @@
       "soc": 99,
       "ueberschuss": 3698,
       "laderate": 15.3,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "09:31",
+      "soc": 100,
+      "ueberschuss": 3954,
+      "laderate": 16.2,
       "n_punkte": 12
     }
   ],
