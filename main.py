@@ -1,7 +1,7 @@
 """
-PV-Heizstab-Automation – Hauptscript v2.9
+PV-Heizstab-Automation – Hauptscript v2.13
 TYDOM-Steuerung via PUT + Schaltlogik + Morgen-/Abend-Report mit Tagesdiagramm
-v2.9: Saisonale Abschaltzeiten, Thermostat-Pause (Entlade-Betrieb), getrennte 6kW-Cutover-Zeit
+v2.13: Zeitzone Europe/Berlin (automatische Sommer-/Winterzeit) statt festem UTC+2
 """
 import asyncio
 import hashlib
@@ -15,7 +15,7 @@ import ssl
 import time
 import urllib.request
 import urllib.parse
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from email.mime.image import MIMEImage
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
@@ -86,17 +86,23 @@ SAISON_6KW_ENDE  = (5, 15)
 PENDING_EIN_SEKUNDEN = 480   # EIN: 2 × 5 Min = 10 Min – Testwert (war 780 = 15 Min effektiv)
 PENDING_AUS_SEKUNDEN = 480   # AUS: 2 × 5 Min = 10 Min – schneller Schutz bei fallendem SOC
 
-# Zeitzone: CEST = UTC+2 (April–Oktober)
-CEST_OFFSET = 2
+# Zeitzone: Europe/Berlin – Sommer-/Winterzeit wird automatisch beruecksichtigt
+try:
+    from zoneinfo import ZoneInfo
+    TZ_LOKAL = ZoneInfo("Europe/Berlin")
+except Exception:
+    # Fallback (auf dem GitHub-Runner nicht zu erwarten): feste Sommerzeit UTC+2
+    TZ_LOKAL = timezone(timedelta(hours=2))
+    print("⚠️  Zeitzonen-Datenbank nicht verfuegbar – Fallback auf festes UTC+2")
 
-# Berichtszeiten (UTC): 07:00 CEST = 05:00 UTC, 21:00 CEST = 19:00 UTC
-MORGENREPORT_UTC_STUNDE = 5
-ABENDREPORT_UTC_STUNDE  = 19
-REPORT_FENSTER_MIN      = 10
+# Berichtszeiten (Lokalzeit): Morgen-Report 07:00 Uhr, Abend-Report 21:00 Uhr
+MORGENREPORT_STUNDE = 7
+ABENDREPORT_STUNDE  = 21
+REPORT_FENSTER_MIN  = 10
 
-# Betriebszeitfenster: System aktiv 06:00 – 22:00 Uhr CEST
-BETRIEB_START_STUNDE  = 6   # 06:00 Uhr CEST
-BETRIEB_ENDE_STUNDE   = 22  # 22:00 Uhr CEST
+# Betriebszeitfenster: System aktiv 06:00 – 22:00 Uhr Lokalzeit
+BETRIEB_START_STUNDE  = 6   # 06:00 Uhr Lokalzeit
+BETRIEB_ENDE_STUNDE   = 22  # 22:00 Uhr Lokalzeit
 ABSCHALT_FENSTER_MIN  = 10  # Abschalt-Prüfung nur in den ersten 10 Min nach 22:00
 
 # Hochspeicher-Entlade-Betrieb: Netzbezug-Grenzen
@@ -212,7 +218,7 @@ def sende_email_mit_anhang(betreff: str, inhalt: str,
         print(f"❌ E-Mail Fehler: {e}")
 
 def benachrichtige(titel: str, text: str, prioritaet: int = 0) -> None:
-    zeit   = (datetime.utcnow() + timedelta(hours=CEST_OFFSET)).strftime("%d.%m.%Y %H:%M")
+    zeit   = lokal_jetzt().strftime("%d.%m.%Y %H:%M")
     inhalt = f"Zeit: {zeit}\n\n{text}"
     sende_pushover(titel, inhalt, prioritaet)
     sende_email(titel, inhalt)
@@ -654,8 +660,12 @@ def berechne_laderate(soc_verlauf: list, min_punkte: int = 3):
 # TAGES-VERLAUF (fuer Diagramm und Energieberechnung)
 # ═══════════════════════════════════════════════════════════════════════════════
 def lokal_jetzt() -> datetime:
-    """Gibt aktuelle Lokalzeit (CEST = UTC+2) zurueck."""
-    return datetime.utcnow() + timedelta(hours=CEST_OFFSET)
+    """Gibt aktuelle Lokalzeit (Europe/Berlin, inkl. autom. Sommer-/Winterzeit) zurueck."""
+    return datetime.now(TZ_LOKAL).replace(tzinfo=None)
+
+def utc_zu_lokal(dt_utc: datetime) -> datetime:
+    """Rechnet einen (naiven) UTC-Zeitstempel in Lokalzeit (Europe/Berlin) um."""
+    return dt_utc.replace(tzinfo=timezone.utc).astimezone(TZ_LOKAL).replace(tzinfo=None)
 
 def reset_wenn_neuer_tag(status: dict) -> None:
     """Setzt Tagesdaten zurueck wenn ein neuer Tag begonnen hat."""
@@ -755,7 +765,7 @@ def ist_manuell_pausiert_3kw(status: dict) -> bool:
     try:
         bis = datetime.fromisoformat(sperre)
         if datetime.utcnow() < bis:
-            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            bis_lokal = utc_zu_lokal(bis)
             print(f"⏸️  3kW 2h-Sperre aktiv bis {bis_lokal.strftime('%H:%M')} Uhr")
             return True
         status["manuell_sperre_3kw_bis"] = None
@@ -771,7 +781,7 @@ def ist_manuell_pausiert_6kw(status: dict) -> bool:
     try:
         bis = datetime.fromisoformat(sperre)
         if datetime.utcnow() < bis:
-            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            bis_lokal = utc_zu_lokal(bis)
             print(f"⏸️  6kW 2h-Sperre aktiv bis {bis_lokal.strftime('%H:%M')} Uhr")
             return True
         status["manuell_sperre_6kw_bis"] = None
@@ -788,7 +798,7 @@ def ist_pending_bestaetigt(pending_seit: str, sekunden: int = PENDING_EIN_SEKUND
         return False
 
 def lokal_minuten() -> int:
-    """Minuten seit Mitternacht in CEST (0–1439)."""
+    """Minuten seit Mitternacht in Lokalzeit (0–1439)."""
     lokal = lokal_jetzt()
     return lokal.hour * 60 + lokal.minute
 
@@ -876,7 +886,7 @@ def ist_thermostat_pausiert_3kw(status: dict) -> bool:
     try:
         bis = datetime.fromisoformat(pause)
         if datetime.utcnow() < bis:
-            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            bis_lokal = utc_zu_lokal(bis)
             print(f"⏸️  3kW Thermostat-Pause bis {bis_lokal.strftime('%H:%M')} Uhr")
             return True
         status["thermostat_pause_3kw_bis"] = None
@@ -892,7 +902,7 @@ def ist_thermostat_pausiert_6kw(status: dict) -> bool:
     try:
         bis = datetime.fromisoformat(pause)
         if datetime.utcnow() < bis:
-            bis_lokal = bis + timedelta(hours=CEST_OFFSET)
+            bis_lokal = utc_zu_lokal(bis)
             print(f"⏸️  6kW Thermostat-Pause bis {bis_lokal.strftime('%H:%M')} Uhr")
             return True
         status["thermostat_pause_6kw_bis"] = None
@@ -901,7 +911,7 @@ def ist_thermostat_pausiert_6kw(status: dict) -> bool:
     return False
 
 def ist_betriebszeit() -> bool:
-    """Prüft ob aktuell Betriebszeit (06:00 – 22:00 Uhr CEST) ist."""
+    """Prüft ob aktuell Betriebszeit (06:00 – 22:00 Uhr Lokalzeit) ist."""
     return BETRIEB_START_STUNDE <= lokal_jetzt().hour < BETRIEB_ENDE_STUNDE
 
 def ist_abschaltzeitfenster() -> bool:
@@ -1230,13 +1240,13 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 pause_bis = (datetime.utcnow() + timedelta(minutes=THERMOSTAT_PAUSE_MINUTEN)).isoformat()
                 status["thermostat_pause_3kw_bis"] = pause_bis
                 status["modus_3kw"] = None
-                bis_lokal = (datetime.utcnow() + timedelta(
-                    minutes=THERMOSTAT_PAUSE_MINUTEN, hours=CEST_OFFSET)).strftime("%H:%M")
+                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(
+                    minutes=THERMOSTAT_PAUSE_MINUTEN)).strftime("%H:%M")
                 msg = f"🌡️ 3kW Thermostat-Abschaltung erkannt – 20 Min Pause (bis {bis_lokal} Uhr)"
                 print(msg)
                 benachrichtige("PV Heizstab – Thermostat 3kW", msg)
             else:
-                bis_lokal = (datetime.utcnow() + timedelta(hours=2+CEST_OFFSET)).strftime("%H:%M")
+                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(hours=2)).strftime("%H:%M")
                 status["manuell_sperre_3kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
                 status["modus_3kw"] = None
                 msg = f"🖐️ 3kW manuell ausgeschaltet – Automatik gesperrt bis {bis_lokal} Uhr"
@@ -1254,13 +1264,13 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 pause_bis = (datetime.utcnow() + timedelta(minutes=THERMOSTAT_PAUSE_MINUTEN)).isoformat()
                 status["thermostat_pause_6kw_bis"] = pause_bis
                 status["modus_6kw"] = None
-                bis_lokal = (datetime.utcnow() + timedelta(
-                    minutes=THERMOSTAT_PAUSE_MINUTEN, hours=CEST_OFFSET)).strftime("%H:%M")
+                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(
+                    minutes=THERMOSTAT_PAUSE_MINUTEN)).strftime("%H:%M")
                 msg = f"🌡️ 6kW Thermostat-Abschaltung erkannt – 20 Min Pause (bis {bis_lokal} Uhr)"
                 print(msg)
                 benachrichtige("PV Heizstab – Thermostat 6kW", msg)
             else:
-                bis_lokal = (datetime.utcnow() + timedelta(hours=2+CEST_OFFSET)).strftime("%H:%M")
+                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(hours=2)).strftime("%H:%M")
                 status["manuell_sperre_6kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
                 status["modus_6kw"] = None
                 msg = f"🖐️ 6kW manuell ausgeschaltet – Automatik gesperrt bis {bis_lokal} Uhr"
@@ -2532,15 +2542,15 @@ def verarbeite_tagesberichte(status: dict) -> None:
     """Prueft ob Morgen- oder Abend-Report gesendet werden soll."""
     jetzt     = lokal_jetzt()
     heute_str = jetzt.strftime("%Y-%m-%d")
-    now_utc_h = datetime.utcnow().hour
-    now_utc_m = datetime.utcnow().minute
+    now_h = jetzt.hour
+    now_m = jetzt.minute
 
-    # ── Morgen-Report: 07:00 CEST = 05:00 UTC ────────────────────────────────
+    # ── Morgen-Report: 07:00 Uhr Lokalzeit ───────────────────────────────────
     letzter_morgen = status.get("morgenreport_datum")
     morgen_faellig = (
         (letzter_morgen is None or letzter_morgen != heute_str)
-        and now_utc_h == MORGENREPORT_UTC_STUNDE
-        and now_utc_m < REPORT_FENSTER_MIN
+        and now_h == MORGENREPORT_STUNDE
+        and now_m < REPORT_FENSTER_MIN
     )
     if morgen_faellig:
         print("📬 Morgen-Report wird gesendet...")
@@ -2549,12 +2559,12 @@ def verarbeite_tagesberichte(status: dict) -> None:
         status["morgenreport_datum"] = heute_str
         print("✅ Morgen-Report gesendet.")
 
-    # ── Abend-Report: 21:00 CEST = 19:00 UTC ─────────────────────────────────
+    # ── Abend-Report: 21:00 Uhr Lokalzeit ────────────────────────────────────
     letzter_abend = status.get("abendreport_datum")
     abend_faellig = (
         (letzter_abend is None or letzter_abend != heute_str)
-        and now_utc_h == ABENDREPORT_UTC_STUNDE
-        and now_utc_m < REPORT_FENSTER_MIN
+        and now_h == ABENDREPORT_STUNDE
+        and now_m < REPORT_FENSTER_MIN
     )
     if abend_faellig:
         print("📊 Abend-Report wird erstellt...")
@@ -2578,7 +2588,7 @@ def verarbeite_tagesberichte(status: dict) -> None:
 def main() -> None:
     print("=== PV MONITOR START ===")
     lokal = lokal_jetzt()
-    print(f"Zeit: {lokal.strftime('%d.%m.%Y %H:%M:%S')} (CEST)")
+    print(f"Zeit: {lokal.strftime('%d.%m.%Y %H:%M:%S')} (Lokalzeit Europe/Berlin)")
 
     status = lade_status()
 
@@ -2601,7 +2611,7 @@ def main() -> None:
             speichere_status(status)
         else:
             print(f"⏸️  Außerhalb Betriebszeit "
-                  f"({lokal.hour:02d}:{lokal.minute:02d} Uhr CEST, "
+                  f"({lokal.hour:02d}:{lokal.minute:02d} Uhr Lokalzeit, "
                   f"aktiv: {BETRIEB_START_STUNDE:02d}:00–{BETRIEB_ENDE_STUNDE:02d}:00) – Exit")
         print("=== PV MONITOR ENDE (außerhalb Betriebszeit) ===")
         return
