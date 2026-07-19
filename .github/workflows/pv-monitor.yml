@@ -6,6 +6,10 @@
   permissions:
     contents: write
 
+  concurrency:
+    group: pv-monitor
+    cancel-in-progress: false
+
   jobs:
     run-monitor:
       runs-on: ubuntu-latest
