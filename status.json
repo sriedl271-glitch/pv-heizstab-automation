@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 50,
-      "zeit": "2026-07-28T05:05:35.712435"
-    },
-    {
       "soc": 52,
       "zeit": "2026-07-28T05:10:47.565525"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 63,
       "zeit": "2026-07-28T06:01:08.901527"
+    },
+    {
+      "soc": 63,
+      "zeit": "2026-07-28T06:05:35.892958"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-07-28",
-    "ein_3kw": 0,
+    "ein_3kw": 1,
     "aus_3kw": 0,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-07-28T05:55:44.230265",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "NORMAL",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-07-27T18:31:36.379517",
-  "letzte_aktualisierung": "2026-07-28T06:01:19.972750",
+  "letzte_schaltzeit": "2026-07-28T06:06:16.504642",
+  "letzte_aktualisierung": "2026-07-28T06:06:18.001504",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-07-28",
   "tages_verlauf": [
@@ -339,9 +339,29 @@
       "bat_laden_w": 3452,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3444
+    },
+    {
+      "zeit": "08:05",
+      "soc": 63,
+      "pv_w": 3987,
+      "haus_w": 543,
+      "einspeisung_w": 0,
+      "netzbezug_w": 8,
+      "bat_laden_w": 3452,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3444
     }
   ],
-  "schaltpunkte_heute": [],
+  "schaltpunkte_heute": [
+    {
+      "zeit": "08:05",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 63,
+      "pv_w": 3987,
+      "modus": "NORMAL"
+    }
+  ],
   "tages_energie_isolarcloud": {
     "pv_kwh": 3.2,
     "einspeisung_kwh": 0.0,
@@ -353,7 +373,7 @@
   "morgenreport_datum": "2026-07-28",
   "abendreport_datum": "2026-07-27",
   "einschalt_pending_6kw": null,
-  "einschalt_schwelle_3kw": null,
+  "einschalt_schwelle_3kw": 45,
   "nach_ausschalt_sperre_3kw": false,
   "heizstab_6kw_ein": false,
   "modus_6kw": null,
@@ -533,6 +553,13 @@
       "soc": 63,
       "ueberschuss": 3444,
       "laderate": 14.0,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "08:05",
+      "soc": 63,
+      "ueberschuss": 3444,
+      "laderate": 12.0,
       "n_punkte": 12
     }
   ],
