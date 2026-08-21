@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 29,
-      "zeit": "2026-08-21T05:30:48.220531"
-    },
-    {
-      "soc": 29,
       "zeit": "2026-08-21T05:35:30.462663"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 32,
       "zeit": "2026-08-21T06:25:33.287525"
+    },
+    {
+      "soc": 32,
+      "zeit": "2026-08-21T06:30:43.583000"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-08-20T17:21:15.857994",
-  "letzte_aktualisierung": "2026-08-21T06:25:43.967721",
+  "letzte_aktualisierung": "2026-08-21T06:30:54.771565",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-08-21",
   "tages_verlauf": [
@@ -394,6 +394,17 @@
       "bat_laden_w": 710,
       "bat_entladen_w": 0,
       "ueberschuss_w": 640
+    },
+    {
+      "zeit": "08:30",
+      "soc": 32,
+      "pv_w": 1029,
+      "haus_w": 663,
+      "einspeisung_w": 4,
+      "netzbezug_w": 0,
+      "bat_laden_w": 362,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 366
     }
   ],
   "schaltpunkte_heute": [],
@@ -622,6 +633,13 @@
       "zeit": "08:25",
       "soc": 32,
       "ueberschuss": 640,
+      "laderate": 3.3,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "08:30",
+      "soc": 32,
+      "ueberschuss": 366,
       "laderate": 3.3,
       "n_punkte": 12
     }
