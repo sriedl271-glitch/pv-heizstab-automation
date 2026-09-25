@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 28,
-      "zeit": "2026-09-25T05:25:33.203729"
-    },
-    {
-      "soc": 28,
       "zeit": "2026-09-25T05:30:46.605822"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 34,
       "zeit": "2026-09-25T06:20:40.482953"
+    },
+    {
+      "soc": 35,
+      "zeit": "2026-09-25T06:25:31.979152"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-09-24T17:31:28.288470",
-  "letzte_aktualisierung": "2026-09-25T06:20:51.747915",
+  "letzte_aktualisierung": "2026-09-25T06:25:42.908384",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-09-25",
   "tages_verlauf": [
@@ -383,14 +383,25 @@
       "bat_laden_w": 2352,
       "bat_entladen_w": 0,
       "ueberschuss_w": 2349
+    },
+    {
+      "zeit": "08:25",
+      "soc": 35,
+      "pv_w": 2996,
+      "haus_w": 335,
+      "einspeisung_w": 0,
+      "netzbezug_w": 7,
+      "bat_laden_w": 2668,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 2661
     }
   ],
   "schaltpunkte_heute": [],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 1.0,
+    "pv_kwh": 1.2,
     "einspeisung_kwh": 0.0,
     "netzbezug_kwh": 1.0,
-    "bat_laden_kwh": 0.8,
+    "bat_laden_kwh": 1.0,
     "bat_entladen_kwh": 1.5,
     "haus_kwh": 2.7
   },
@@ -605,6 +616,13 @@
       "soc": 34,
       "ueberschuss": 2349,
       "laderate": 6.5,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "08:25",
+      "soc": 35,
+      "ueberschuss": 2661,
+      "laderate": 7.7,
       "n_punkte": 12
     }
   ],
