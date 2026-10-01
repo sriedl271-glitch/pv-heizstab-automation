@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 29,
-      "zeit": "2026-10-01T06:05:32.946991"
-    },
-    {
       "soc": 30,
       "zeit": "2026-10-01T06:10:40.623396"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 48,
       "zeit": "2026-10-01T07:01:06.594715"
+    },
+    {
+      "soc": 48,
+      "zeit": "2026-10-01T07:05:32.229882"
     }
   ],
   "schaltungen_heute": {
@@ -58,10 +58,10 @@
   },
   "heizstab_3kw_ein": false,
   "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-10-01T07:01:17.494746",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-09-30T18:32:23.719277",
-  "letzte_aktualisierung": "2026-10-01T07:01:17.494864",
+  "letzte_aktualisierung": "2026-10-01T07:05:43.213209",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-01",
   "tages_verlauf": [
@@ -471,6 +471,17 @@
       "bat_laden_w": 3565,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3560
+    },
+    {
+      "zeit": "09:05",
+      "soc": 48,
+      "pv_w": 3958,
+      "haus_w": 398,
+      "einspeisung_w": 0,
+      "netzbezug_w": 5,
+      "bat_laden_w": 3565,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3560
     }
   ],
   "schaltpunkte_heute": [],
@@ -749,6 +760,13 @@
       "soc": 48,
       "ueberschuss": 3560,
       "laderate": 20.5,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "09:05",
+      "soc": 48,
+      "ueberschuss": 3560,
+      "laderate": 19.7,
       "n_punkte": 12
     }
   ],
