@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 88,
-      "zeit": "2026-10-03T09:20:36.020901"
-    },
-    {
       "soc": 90,
       "zeit": "2026-10-03T09:25:33.928396"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 96,
       "zeit": "2026-10-03T10:15:43.967120"
+    },
+    {
+      "soc": 95,
+      "zeit": "2026-10-03T10:20:42.145634"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-10-03T09:46:18.642521",
-  "letzte_aktualisierung": "2026-10-03T10:15:55.526668",
+  "letzte_aktualisierung": "2026-10-03T10:20:55.282214",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-03",
   "tages_verlauf": [
@@ -900,6 +900,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 1623,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "12:20",
+      "soc": 95,
+      "pv_w": 7580,
+      "haus_w": 9213,
+      "einspeisung_w": 6,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 1639,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -921,20 +932,20 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 20.0,
+    "pv_kwh": 20.6,
     "einspeisung_kwh": 1.6,
     "netzbezug_kwh": 3.1,
     "bat_laden_kwh": 9.0,
-    "bat_entladen_kwh": 1.0,
-    "haus_kwh": 13.5
+    "bat_entladen_kwh": 1.2,
+    "haus_kwh": 14.3
   },
   "morgenreport_datum": "2026-10-03",
   "abendreport_datum": "2026-10-02",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 55,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": true,
-  "modus_6kw": "HOCHSPEICHER",
+  "heizstab_6kw_ein": false,
+  "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
   "nach_ausschalt_sperre_6kw": false,
@@ -1425,5 +1436,5 @@
   "saisonale_abschaltung_6kw": null,
   "saisonale_abschaltung_3kw": null,
   "thermostat_pause_3kw_bis": null,
-  "thermostat_pause_6kw_bis": null
+  "thermostat_pause_6kw_bis": "2026-10-03T10:40:53.488008"
 }
