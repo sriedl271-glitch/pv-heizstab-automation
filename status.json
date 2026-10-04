@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 94,
-      "zeit": "2026-10-04T11:55:33.399848"
-    },
-    {
       "soc": 100,
       "zeit": "2026-10-04T12:01:00.595415"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 85,
       "zeit": "2026-10-04T12:50:41.506689"
+    },
+    {
+      "soc": 83,
+      "zeit": "2026-10-04T12:55:34.531095"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-10-04T11:51:20.864284",
-  "letzte_aktualisierung": "2026-10-04T12:50:53.199010",
+  "letzte_aktualisierung": "2026-10-04T12:55:47.702690",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-04",
   "tages_verlauf": [
@@ -1241,6 +1241,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 3859,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "14:55",
+      "soc": 83,
+      "pv_w": 6054,
+      "haus_w": 11264,
+      "einspeisung_w": 0,
+      "netzbezug_w": 1425,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 3785,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1270,20 +1281,20 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 24.4,
+    "pv_kwh": 25.0,
     "einspeisung_kwh": 0.8,
-    "netzbezug_kwh": 1.0,
+    "netzbezug_kwh": 1.2,
     "bat_laden_kwh": 10.1,
-    "bat_entladen_kwh": 4.9,
-    "haus_kwh": 19.4
+    "bat_entladen_kwh": 5.2,
+    "haus_kwh": 20.5
   },
   "morgenreport_datum": "2026-10-04",
   "abendreport_datum": "2026-10-03",
   "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 55,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": true,
-  "modus_6kw": "NORMAL",
+  "heizstab_6kw_ein": false,
+  "modus_6kw": null,
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": 70,
   "nach_ausschalt_sperre_6kw": false,
@@ -1970,5 +1981,5 @@
   "saisonale_abschaltung_6kw": null,
   "saisonale_abschaltung_3kw": null,
   "thermostat_pause_3kw_bis": null,
-  "thermostat_pause_6kw_bis": null
+  "thermostat_pause_6kw_bis": "2026-10-04T13:15:45.710825"
 }
