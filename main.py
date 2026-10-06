@@ -1,6 +1,8 @@
 """
-PV-Heizstab-Automation – Hauptscript v2.13
+PV-Heizstab-Automation – Hauptscript v2.14
 TYDOM-Steuerung via PUT + Schaltlogik + Morgen-/Abend-Report mit Tagesdiagramm
+v2.14: Manuell AUS per TYDOM-App → immer 2h-Sperre (Thermostat-Pause im Entlade-Betrieb
+       per THERMOSTAT_PAUSE_AKTIV=False deaktiviert, Code bleibt für spätere Nutzung erhalten)
 v2.13: Zeitzone Europe/Berlin (automatische Sommer-/Winterzeit) statt festem UTC+2
 """
 import asyncio
@@ -114,6 +116,9 @@ ENTLADE_NETZ_NORMAL       = 800   # W – Netzbezug-Grenze im Pending-Fenster / 
 
 # Thermostat-Pause: erkannte interne Thermostat-Abschaltung im Entlade-Betrieb
 THERMOSTAT_PAUSE_MINUTEN = 20     # Minuten Pause nach Thermostat-Abschaltung (kein 2h-Lock)
+THERMOSTAT_PAUSE_AKTIV   = False  # v2.14: False = jedes erkannte AUS (auch im Entlade-Betrieb)
+                                  #        löst die 2h-Sperre aus; True = altes Verhalten (20-Min-Pause)
+MANUELL_SPERRE_STUNDEN   = 2      # Dauer der Automatik-Sperre nach manuellem AUS per TYDOM-App
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -758,6 +763,18 @@ def ist_automation_pausiert() -> bool:
         pass
     return False
 
+def manuell_aus_reaktion(schalt_kuerzlich: bool, entlade_betrieb: bool) -> str:
+    """Entscheidet, wie auf ein erkanntes AUS (TYDOM meldet AUS, Automatik hatte EIN) reagiert wird.
+    Returns: "KEIN_LOCK"        – eigener Schaltbefehl < 15 Min her
+             "THERMOSTAT_PAUSE" – nur wenn THERMOSTAT_PAUSE_AKTIV und Entlade-Betrieb (20 Min)
+             "SPERRE_2H"        – Standard seit v2.14: 2h Automatik-Sperre
+    """
+    if schalt_kuerzlich:
+        return "KEIN_LOCK"
+    if THERMOSTAT_PAUSE_AKTIV and entlade_betrieb:
+        return "THERMOSTAT_PAUSE"
+    return "SPERRE_2H"
+
 def ist_manuell_pausiert_3kw(status: dict) -> bool:
     sperre = status.get("manuell_sperre_3kw_bis")
     if not sperre:
@@ -1233,10 +1250,11 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     if tydom_3kw != ist_3kw_ein:
         if not tydom_3kw and ist_3kw_ein:
-            if schalt_kuerzlich:
+            reaktion_3kw = manuell_aus_reaktion(schalt_kuerzlich, ist_entlade_betrieb(status))
+            if reaktion_3kw == "KEIN_LOCK":
                 print("ℹ️  3kW AUS nach Schaltbefehl – kein Lock")
-            elif ist_entlade_betrieb(status):
-                # Thermostat-Abschaltung im Entlade-Betrieb: 20-Min-Pause statt 2h-Lock
+            elif reaktion_3kw == "THERMOSTAT_PAUSE":
+                # Nur bei THERMOSTAT_PAUSE_AKTIV=True: 20-Min-Pause statt 2h-Lock (seit v2.14 inaktiv)
                 pause_bis = (datetime.utcnow() + timedelta(minutes=THERMOSTAT_PAUSE_MINUTEN)).isoformat()
                 status["thermostat_pause_3kw_bis"] = pause_bis
                 status["modus_3kw"] = None
@@ -1246,8 +1264,8 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print(msg)
                 benachrichtige("PV Heizstab – Thermostat 3kW", msg)
             else:
-                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(hours=2)).strftime("%H:%M")
-                status["manuell_sperre_3kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
+                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(hours=MANUELL_SPERRE_STUNDEN)).strftime("%H:%M")
+                status["manuell_sperre_3kw_bis"] = (datetime.utcnow() + timedelta(hours=MANUELL_SPERRE_STUNDEN)).isoformat()
                 status["modus_3kw"] = None
                 msg = f"🖐️ 3kW manuell ausgeschaltet – Automatik gesperrt bis {bis_lokal} Uhr"
                 print(msg); meldungen.append(msg)
@@ -1257,10 +1275,11 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
 
     if tydom_6kw != ist_6kw_ein:
         if not tydom_6kw and ist_6kw_ein:
-            if schalt_kuerzlich:
+            reaktion_6kw = manuell_aus_reaktion(schalt_kuerzlich, ist_entlade_betrieb_6kw(status))
+            if reaktion_6kw == "KEIN_LOCK":
                 print("ℹ️  6kW AUS nach Schaltbefehl – kein Lock")
-            elif ist_entlade_betrieb_6kw(status):
-                # Thermostat-Abschaltung im Entlade-Betrieb: 20-Min-Pause statt 2h-Lock
+            elif reaktion_6kw == "THERMOSTAT_PAUSE":
+                # Nur bei THERMOSTAT_PAUSE_AKTIV=True: 20-Min-Pause statt 2h-Lock (seit v2.14 inaktiv)
                 pause_bis = (datetime.utcnow() + timedelta(minutes=THERMOSTAT_PAUSE_MINUTEN)).isoformat()
                 status["thermostat_pause_6kw_bis"] = pause_bis
                 status["modus_6kw"] = None
@@ -1270,8 +1289,8 @@ def verarbeite_schaltlogik(daten: dict, status: dict, tydom_zustand: dict) -> tu
                 print(msg)
                 benachrichtige("PV Heizstab – Thermostat 6kW", msg)
             else:
-                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(hours=2)).strftime("%H:%M")
-                status["manuell_sperre_6kw_bis"] = (datetime.utcnow() + timedelta(hours=2)).isoformat()
+                bis_lokal = utc_zu_lokal(datetime.utcnow() + timedelta(hours=MANUELL_SPERRE_STUNDEN)).strftime("%H:%M")
+                status["manuell_sperre_6kw_bis"] = (datetime.utcnow() + timedelta(hours=MANUELL_SPERRE_STUNDEN)).isoformat()
                 status["modus_6kw"] = None
                 msg = f"🖐️ 6kW manuell ausgeschaltet – Automatik gesperrt bis {bis_lokal} Uhr"
                 print(msg); meldungen.append(msg)
