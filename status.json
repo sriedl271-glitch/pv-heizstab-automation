@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 80,
-      "zeit": "2026-10-06T09:35:38.215420"
-    },
-    {
       "soc": 81,
       "zeit": "2026-10-06T09:40:43.606599"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 100,
       "zeit": "2026-10-06T10:31:32.084584"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-10-06T10:35:52.284804"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-10-06",
     "ein_3kw": 1,
     "aus_3kw": 0,
-    "ein_6kw": 0,
+    "ein_6kw": 1,
     "aus_6kw": 0
   },
   "heizstab_3kw_ein": true,
   "modus_3kw": "NORMAL",
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-10-06T07:56:22.781371",
-  "letzte_aktualisierung": "2026-10-06T10:31:43.529772",
+  "letzte_schaltzeit": "2026-10-06T10:36:34.702444",
+  "letzte_aktualisierung": "2026-10-06T10:36:37.029175",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-06",
   "tages_verlauf": [
@@ -933,6 +933,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 0,
       "ueberschuss_w": 4555
+    },
+    {
+      "zeit": "12:35",
+      "soc": 100,
+      "pv_w": 7906,
+      "haus_w": 3351,
+      "einspeisung_w": 4555,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 4555
     }
   ],
   "schaltpunkte_heute": [
@@ -943,6 +954,14 @@
       "soc": 60,
       "pv_w": 4910,
       "modus": "NORMAL"
+    },
+    {
+      "zeit": "12:36",
+      "geraet": "6kw",
+      "aktion": "EIN",
+      "soc": 100,
+      "pv_w": 7906,
+      "modus": "HOCHSPEICHER"
     }
   ],
   "tages_energie_isolarcloud": {
@@ -955,11 +974,11 @@
   },
   "morgenreport_datum": "2026-10-06",
   "abendreport_datum": "2026-10-05",
-  "einschalt_pending_6kw": "2026-10-06T10:26:26.074839",
+  "einschalt_pending_6kw": null,
   "einschalt_schwelle_3kw": 55,
   "nach_ausschalt_sperre_3kw": false,
-  "heizstab_6kw_ein": false,
-  "modus_6kw": null,
+  "heizstab_6kw_ein": true,
+  "modus_6kw": "HOCHSPEICHER",
   "soc_abschaltung_6kw": false,
   "einschalt_schwelle_6kw": null,
   "nach_ausschalt_sperre_6kw": false,
