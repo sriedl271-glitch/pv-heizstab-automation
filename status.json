@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 76,
-      "zeit": "2026-10-14T13:10:45.886259"
-    },
-    {
       "soc": 74,
       "zeit": "2026-10-14T13:15:41.775429"
     },
@@ -47,21 +43,25 @@
     {
       "soc": 85,
       "zeit": "2026-10-14T14:05:35.961676"
+    },
+    {
+      "soc": 86,
+      "zeit": "2026-10-14T14:10:45.122519"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-10-14",
-    "ein_3kw": 1,
+    "ein_3kw": 2,
     "aus_3kw": 1,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-10-14T14:01:18.748093",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "HOCHSPEICHER",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-10-14T13:26:18.058131",
-  "letzte_aktualisierung": "2026-10-14T14:05:46.956064",
+  "letzte_schaltzeit": "2026-10-14T14:11:26.985034",
+  "letzte_aktualisierung": "2026-10-14T14:11:28.948286",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-14",
   "tages_verlauf": [
@@ -1406,6 +1406,17 @@
       "bat_laden_w": 3564,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3568
+    },
+    {
+      "zeit": "16:10",
+      "soc": 86,
+      "pv_w": 2824,
+      "haus_w": 860,
+      "einspeisung_w": 65,
+      "netzbezug_w": 0,
+      "bat_laden_w": 1899,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 1964
     }
   ],
   "schaltpunkte_heute": [
@@ -1440,15 +1451,23 @@
       "soc": 73,
       "pv_w": 5846,
       "modus": "SOC<75%"
+    },
+    {
+      "zeit": "16:10",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 86,
+      "pv_w": 2824,
+      "modus": "HOCHSPEICHER"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 28.9,
+    "pv_kwh": 29.2,
     "einspeisung_kwh": 0.7,
     "netzbezug_kwh": 4.8,
-    "bat_laden_kwh": 12.3,
+    "bat_laden_kwh": 12.5,
     "bat_entladen_kwh": 4.3,
-    "haus_kwh": 25.0
+    "haus_kwh": 25.1
   },
   "morgenreport_datum": "2026-10-14",
   "abendreport_datum": "2026-10-13",
