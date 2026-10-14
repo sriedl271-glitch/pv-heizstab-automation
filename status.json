@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 83,
-      "zeit": "2026-10-14T14:50:40.473066"
-    },
-    {
       "soc": 82,
       "zeit": "2026-10-14T14:55:36.121202"
     },
@@ -47,22 +43,26 @@
     {
       "soc": 67,
       "zeit": "2026-10-14T15:50:41.859636"
+    },
+    {
+      "soc": 64,
+      "zeit": "2026-10-14T15:55:36.000719"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-10-14",
     "ein_3kw": 2,
-    "aus_3kw": 1,
+    "aus_3kw": 2,
     "ein_6kw": 1,
     "aus_6kw": 1
   },
-  "heizstab_3kw_ein": true,
-  "modus_3kw": "HOCHSPEICHER",
+  "heizstab_3kw_ein": false,
+  "modus_3kw": null,
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-10-14T14:11:26.985034",
-  "letzte_aktualisierung": "2026-10-14T15:50:52.878823",
-  "ausschalt_pending_3kw": "2026-10-14T15:45:53.214368",
+  "letzte_schaltzeit": "2026-10-14T15:56:17.386709",
+  "letzte_aktualisierung": "2026-10-14T15:56:19.461211",
+  "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-14",
   "tages_verlauf": [
     {
@@ -1626,6 +1626,17 @@
       "bat_laden_w": 0,
       "bat_entladen_w": 3783,
       "ueberschuss_w": 0
+    },
+    {
+      "zeit": "17:55",
+      "soc": 64,
+      "pv_w": 347,
+      "haus_w": 4424,
+      "einspeisung_w": 0,
+      "netzbezug_w": 53,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 4024,
+      "ueberschuss_w": 0
     }
   ],
   "schaltpunkte_heute": [
@@ -1668,15 +1679,23 @@
       "soc": 86,
       "pv_w": 2824,
       "modus": "HOCHSPEICHER"
+    },
+    {
+      "zeit": "17:55",
+      "geraet": "3kw",
+      "aktion": "AUS",
+      "soc": 64,
+      "pv_w": 347,
+      "modus": "SOC<70%"
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 31.9,
+    "pv_kwh": 32.0,
     "einspeisung_kwh": 0.7,
     "netzbezug_kwh": 4.8,
     "bat_laden_kwh": 13.0,
-    "bat_entladen_kwh": 7.3,
-    "haus_kwh": 30.3
+    "bat_entladen_kwh": 7.6,
+    "haus_kwh": 30.7
   },
   "morgenreport_datum": "2026-10-14",
   "abendreport_datum": "2026-10-13",
