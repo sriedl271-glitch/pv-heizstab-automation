@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 82,
-      "zeit": "2026-10-18T11:01:00.351652"
-    },
-    {
-      "soc": 82,
       "zeit": "2026-10-18T11:05:34.258184"
     },
     {
@@ -47,6 +43,10 @@
     {
       "soc": 92,
       "zeit": "2026-10-18T11:55:36.317035"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-10-18T12:01:06.205978"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-10-18T09:11:24.711415",
-  "letzte_aktualisierung": "2026-10-18T11:55:46.962024",
+  "letzte_aktualisierung": "2026-10-18T12:01:17.267449",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-10-18",
   "tages_verlauf": [
@@ -1120,6 +1120,17 @@
       "bat_laden_w": 3166,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3142
+    },
+    {
+      "zeit": "14:01",
+      "soc": 100,
+      "pv_w": 6879,
+      "haus_w": 3873,
+      "einspeisung_w": 3006,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3006
     }
   ],
   "schaltpunkte_heute": [
@@ -1133,16 +1144,16 @@
     }
   ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 21.1,
-    "einspeisung_kwh": 0.0,
+    "pv_kwh": 22.3,
+    "einspeisung_kwh": 0.1,
     "netzbezug_kwh": 5.2,
-    "bat_laden_kwh": 9.8,
+    "bat_laden_kwh": 10.3,
     "bat_entladen_kwh": 0.8,
-    "haus_kwh": 17.3
+    "haus_kwh": 17.9
   },
   "morgenreport_datum": "2026-10-18",
   "abendreport_datum": "2026-10-17",
-  "einschalt_pending_6kw": null,
+  "einschalt_pending_6kw": "2026-10-18T12:01:17.267341",
   "einschalt_schwelle_3kw": 40,
   "nach_ausschalt_sperre_3kw": false,
   "heizstab_6kw_ein": false,
@@ -1153,7 +1164,7 @@
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-10-17",
   "ausschalt_pending_6kw": null,
-  "batterie_war_voll": false,
+  "batterie_war_voll": true,
   "manuell_sperre_6kw_bis": null,
   "manuell_sperre_3kw_bis": null,
   "laderate_verlauf": [
@@ -1827,6 +1838,13 @@
       "soc": 92,
       "ueberschuss": 3142,
       "laderate": 11.0,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "14:01",
+      "soc": 100,
+      "ueberschuss": 3006,
+      "laderate": 19.4,
       "n_punkte": 12
     }
   ],
