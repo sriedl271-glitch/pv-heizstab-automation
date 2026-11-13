@@ -1,10 +1,6 @@
 {
   "soc_verlauf": [
     {
-      "soc": 35,
-      "zeit": "2026-11-13T13:30:55.444177"
-    },
-    {
       "soc": 36,
       "zeit": "2026-11-13T13:35:36.305573"
     },
@@ -47,6 +43,10 @@
     {
       "soc": 39,
       "zeit": "2026-11-13T14:25:38.182330"
+    },
+    {
+      "soc": 39,
+      "zeit": "2026-11-13T14:30:55.258166"
     }
   ],
   "schaltungen_heute": {
@@ -61,7 +61,7 @@
   "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
   "letzte_schaltzeit": "2026-11-06T14:31:31.484507",
-  "letzte_aktualisierung": "2026-11-13T14:25:49.063200",
+  "letzte_aktualisierung": "2026-11-13T14:31:06.501471",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-11-13",
   "tages_verlauf": [
@@ -1318,6 +1318,17 @@
       "bat_laden_w": 39,
       "bat_entladen_w": 0,
       "ueberschuss_w": 44
+    },
+    {
+      "zeit": "15:30",
+      "soc": 39,
+      "pv_w": 2068,
+      "haus_w": 836,
+      "einspeisung_w": 0,
+      "netzbezug_w": 160,
+      "bat_laden_w": 1392,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 1232
     }
   ],
   "schaltpunkte_heute": [],
@@ -2143,10 +2154,17 @@
       "ueberschuss": 44,
       "laderate": 4.4,
       "n_punkte": 12
+    },
+    {
+      "zeit": "15:30",
+      "soc": 39,
+      "ueberschuss": 1232,
+      "laderate": 3.3,
+      "n_punkte": 12
     }
   ],
   "saisonale_abschaltung_6kw": "2026-11-13",
-  "saisonale_abschaltung_3kw": null,
+  "saisonale_abschaltung_3kw": "2026-11-13",
   "thermostat_pause_3kw_bis": null,
   "thermostat_pause_6kw_bis": null
 }
