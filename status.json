@@ -2,10 +2,6 @@
   "soc_verlauf": [
     {
       "soc": 68,
-      "zeit": "2026-11-23T12:20:42.453593"
-    },
-    {
-      "soc": 68,
       "zeit": "2026-11-23T12:25:43.606051"
     },
     {
@@ -47,21 +43,25 @@
     {
       "soc": 77,
       "zeit": "2026-11-23T13:15:49.710482"
+    },
+    {
+      "soc": 100,
+      "zeit": "2026-11-23T13:20:46.215612"
     }
   ],
   "schaltungen_heute": {
     "datum": "2026-11-23",
-    "ein_3kw": 0,
+    "ein_3kw": 1,
     "aus_3kw": 0,
     "ein_6kw": 0,
     "aus_6kw": 0
   },
-  "heizstab_3kw_ein": false,
-  "modus_3kw": null,
-  "einschalt_pending_3kw": "2026-11-23T13:16:01.210781",
+  "heizstab_3kw_ein": true,
+  "modus_3kw": "EINSPEISUNG_STOPP",
+  "einschalt_pending_3kw": null,
   "soc_abschaltung_3kw": false,
-  "letzte_schaltzeit": "2026-11-18T11:06:19.085188",
-  "letzte_aktualisierung": "2026-11-23T13:16:01.210892",
+  "letzte_schaltzeit": "2026-11-23T13:21:26.600632",
+  "letzte_aktualisierung": "2026-11-23T13:21:28.531683",
   "ausschalt_pending_3kw": null,
   "tages_datum": "2026-11-23",
   "tages_verlauf": [
@@ -1164,16 +1164,36 @@
       "bat_laden_w": 3043,
       "bat_entladen_w": 0,
       "ueberschuss_w": 3034
+    },
+    {
+      "zeit": "14:20",
+      "soc": 100,
+      "pv_w": 3658,
+      "haus_w": 636,
+      "einspeisung_w": 3022,
+      "netzbezug_w": 0,
+      "bat_laden_w": 0,
+      "bat_entladen_w": 0,
+      "ueberschuss_w": 3022
     }
   ],
-  "schaltpunkte_heute": [],
+  "schaltpunkte_heute": [
+    {
+      "zeit": "14:20",
+      "geraet": "3kw",
+      "aktion": "EIN",
+      "soc": 100,
+      "pv_w": 3658,
+      "modus": "EINSPEISUNG_STOPP"
+    }
+  ],
   "tages_energie_isolarcloud": {
-    "pv_kwh": 11.9,
-    "einspeisung_kwh": 0.1,
+    "pv_kwh": 12.2,
+    "einspeisung_kwh": 0.3,
     "netzbezug_kwh": 5.0,
     "bat_laden_kwh": 7.5,
     "bat_entladen_kwh": 0.3,
-    "haus_kwh": 9.6
+    "haus_kwh": 9.7
   },
   "morgenreport_datum": "2026-11-23",
   "abendreport_datum": "2026-11-22",
@@ -1188,7 +1208,7 @@
   "manuell_sperre_bis": null,
   "abschalt_pruefung_datum": "2026-11-22",
   "ausschalt_pending_6kw": null,
-  "batterie_war_voll": false,
+  "batterie_war_voll": true,
   "manuell_sperre_6kw_bis": null,
   "manuell_sperre_3kw_bis": null,
   "laderate_verlauf": [
@@ -1890,6 +1910,13 @@
       "soc": 77,
       "ueberschuss": 3034,
       "laderate": 9.8,
+      "n_punkte": 12
+    },
+    {
+      "zeit": "14:20",
+      "soc": 100,
+      "ueberschuss": 3022,
+      "laderate": 34.9,
       "n_punkte": 12
     }
   ],
